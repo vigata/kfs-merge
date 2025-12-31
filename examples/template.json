@@ -1,0 +1,15 @@
+{
+  "name": "my-service",
+  "version": "1.0.0",
+  "config": {
+    "timeout": 30,
+    "retries": 3,
+    "enabled": true
+  },
+  "tags": ["production", "stable"],
+  "dependencies": [
+    { "name": "logger", "version": "2.0.0" },
+    { "name": "metrics", "version": "1.5.0" }
+  ]
+}
+

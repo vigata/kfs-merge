@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "x-kfs-merge": {
+    "defaultStrategy": "mergeRequest",
+    "arrayStrategy": "replace"
+  },
+  "properties": {
+    "name": {
+      "type": "string",
+      "x-kfs-merge": { "strategy": "keepBase" }
+    },
+    "version": {
+      "type": "string"
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "timeout": { "type": "integer" },
+        "retries": { "type": "integer" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "x-kfs-merge": { "strategy": "concat" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" }
+        }
+      },
+      "x-kfs-merge": { "strategy": "mergeByKey", "mergeKey": "name" }
+    }
+  },
+  "required": ["name"]
+}
+

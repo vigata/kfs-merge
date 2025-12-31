@@ -1,0 +1,13 @@
+{
+  "name": "custom-service",
+  "version": "2.0.0",
+  "config": {
+    "timeout": 60
+  },
+  "tags": ["custom", "testing"],
+  "dependencies": [
+    { "name": "logger", "version": "3.0.0" },
+    { "name": "auth", "version": "1.0.0" }
+  ]
+}
+
