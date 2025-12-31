@@ -45,7 +45,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
     "strategy": "strategyName",
     "mergeKey": "keyField",           // For mergeByKey strategy
     "discriminatorField": "type",     // For mergeByDiscriminator strategy
-    "replaceOnMatch": false,          // For mergeByKey/mergeByDiscriminator: replace instead of deep merge
+    "replaceOnMatch": true,           // Default for mergeByKey/mergeByDiscriminator (set false to deep merge matches)
     "defaultStrategy": "mergeRequest", // Default for all fields
     "arrayStrategy": "replace",       // Default for arrays
     "nullHandling": "asAbsent"        // How to treat null values
@@ -425,7 +425,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ### 8. mergeByKey
 
-**Description**: Merges arrays of objects by matching them on a specified key field. Objects with matching keys are deep merged; objects unique to A or B are included in the result.
+**Description**: Merges arrays of objects by matching them on a specified key field. By default, matching items are **replaced** (A’s item fully replaces B’s). Objects unique to A or B are included in the result. Set `replaceOnMatch: false` if you want deep-merge semantics instead.
 
 **When to Use**:
 - Arrays of configuration objects with unique identifiers
@@ -484,8 +484,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
   "audio_output_config": [
     {
       "output_track": 0,
-      "language": "Spa",
-      "output_file_pattern": "[source_basename]_[output_track].[default_extension]"
+      "language": "Spa"
     },
     {
       "output_track": 2,
@@ -500,32 +499,18 @@ By default, A takes precedence over B (request overrides base), but each strateg
 }
 ```
 
-**Explanation**:
-- Track 0: Merged (A's language "Spa" overrides B's "Eng", B's pattern is preserved)
-- Track 2: From A only (new track)
-- Track 1: From B only (preserved)
+**Explanation (replaceOnMatch default = true)**:
+- Track 0: A's item replaces B's entirely, so B's `output_file_pattern` is dropped.
+- Track 2: From A only (new track).
+- Track 1: From B only (preserved).
 
-#### replaceOnMatch Option
-
-By default, `mergeByKey` deep merges matching items (A's fields override B's, but B's other fields are preserved). Set `replaceOnMatch: true` to completely replace B's item with A's item instead:
-
-```json
-{
-  "x-kfs-merge": {
-    "strategy": "mergeByKey",
-    "mergeKey": "output_track",
-    "replaceOnMatch": true
-  }
-}
-```
-
-With `replaceOnMatch: true`, when A has `{"output_track": 0, "language": "Spa"}` and B has `{"output_track": 0, "language": "Eng", "output_file_pattern": "..."}`, the result will be `{"output_track": 0, "language": "Spa"}` — B's `output_file_pattern` is NOT preserved.
+To deep merge matching items instead of replacing, set `replaceOnMatch: false` (no example shown).
 
 ---
 
 ### 9. mergeByDiscriminator
 
-**Description**: Merges arrays of discriminated union objects (oneOf/anyOf) by matching on a discriminator field (typically "type"). Objects with matching discriminator values are deep merged.
+**Description**: Merges arrays of discriminated union objects (oneOf/anyOf) by matching on a discriminator field (typically "type"). By default, matching items are **replaced** (A’s item fully replaces B’s). Set `replaceOnMatch: false` to deep merge matching items instead.
 
 **When to Use**:
 - Arrays of polymorphic objects with a type field
@@ -594,33 +579,19 @@ With `replaceOnMatch: true`, when A has `{"output_track": 0, "language": "Spa"}`
 ```json
 {
   "filters": [
-    {"type": "hqdn3d", "luma_spatial": 10, "luma_tmp": 6},
+    {"type": "hqdn3d", "luma_spatial": 10},
     {"type": "sharpen", "amount": 0.5},
     {"type": "unsharp", "luma_amount": -0.98, "luma_msize_x": 3}
   ]
 }
 ```
 
-**Explanation**:
-- `hqdn3d`: Merged (A's luma_spatial=10 overrides B's 8, B's luma_tmp=6 preserved)
-- `sharpen`: From A only (new filter type)
-- `unsharp`: From B only (preserved)
+**Explanation (replaceOnMatch default = true)**:
+- `hqdn3d`: A's item replaces B's, so B's `luma_tmp` is dropped.
+- `sharpen`: From A only (new filter type).
+- `unsharp`: From B only (preserved).
 
-#### replaceOnMatch Option
-
-By default, `mergeByDiscriminator` deep merges matching items (A's fields override B's, but B's other fields are preserved). Set `replaceOnMatch: true` to completely replace B's item with A's item instead:
-
-```json
-{
-  "x-kfs-merge": {
-    "strategy": "mergeByDiscriminator",
-    "discriminatorField": "type",
-    "replaceOnMatch": true
-  }
-}
-```
-
-With `replaceOnMatch: true`, when A has `{"type": "hqdn3d", "luma_spatial": 10}` and B has `{"type": "hqdn3d", "luma_spatial": 8, "luma_tmp": 6}`, the result will be `{"type": "hqdn3d", "luma_spatial": 10}` — B's `luma_tmp` is NOT preserved.
+To deep merge matching items instead of replacing, set `replaceOnMatch: false` (no example shown).
 
 ---
 

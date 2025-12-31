@@ -135,7 +135,7 @@ func (s *Schema) parseDefsConfigs() error {
 				config.DiscriminatorField = discriminatorField
 			}
 			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = replaceOnMatch
+				config.ReplaceOnMatch = &replaceOnMatch
 			}
 			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
 				config.NullHandling = NullHandling(nullHandling)
@@ -174,7 +174,7 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 				config.DiscriminatorField = discriminatorField
 			}
 			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = replaceOnMatch
+				config.ReplaceOnMatch = &replaceOnMatch
 			}
 			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
 				config.NullHandling = NullHandling(nullHandling)
@@ -254,7 +254,7 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 				config.DiscriminatorField = discriminatorField
 			}
 			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = replaceOnMatch
+				config.ReplaceOnMatch = &replaceOnMatch
 			}
 			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
 				config.NullHandling = NullHandling(nullHandling)

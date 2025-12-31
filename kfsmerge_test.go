@@ -1149,8 +1149,8 @@ func TestMergeByDiscriminatorNewType(t *testing.T) {
 	}
 }
 
-// TestMergeByDiscriminatorReplaceOnMatch tests that replaceOnMatch replaces instead of deep merging.
-func TestMergeByDiscriminatorReplaceOnMatch(t *testing.T) {
+// TestMergeByDiscriminatorDefaultReplaceOnMatch verifies default replaceOnMatch behavior (unspecified -> replace).
+func TestMergeByDiscriminatorDefaultReplaceOnMatch(t *testing.T) {
 	schemaJSON := []byte(`{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -1165,7 +1165,7 @@ func TestMergeByDiscriminatorReplaceOnMatch(t *testing.T) {
 						"extra": {"type": "string"}
 					}
 				},
-				"x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "type", "replaceOnMatch": true}
+				"x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "type"}
 			}
 		}
 	}`)
@@ -1177,7 +1177,7 @@ func TestMergeByDiscriminatorReplaceOnMatch(t *testing.T) {
 
 	// B has hqdn3d with value:8 and extra:"fromB"
 	// A has hqdn3d with value:12 only (no extra field)
-	// With replaceOnMatch=true, A's item should completely replace B's (no extra field)
+	// With default replaceOnMatch=true, A's item should completely replace B's (no extra field)
 	b := []byte(`{"filters": [
 		{"type": "hqdn3d", "value": 8, "extra": "fromB"},
 		{"type": "unsharp", "value": 1}
@@ -1210,7 +1210,7 @@ func TestMergeByDiscriminatorReplaceOnMatch(t *testing.T) {
 			if filter["value"] != float64(12) {
 				t.Errorf("hqdn3d.value = %v, want 12", filter["value"])
 			}
-			// With replaceOnMatch=true, extra should NOT be present (A didn't have it)
+			// With replaceOnMatch=true (default), extra should NOT be present (A didn't have it)
 			if _, hasExtra := filter["extra"]; hasExtra {
 				t.Errorf("hqdn3d.extra should not exist with replaceOnMatch=true, got %v", filter["extra"])
 			}
@@ -1218,8 +1218,8 @@ func TestMergeByDiscriminatorReplaceOnMatch(t *testing.T) {
 	}
 }
 
-// TestMergeByKeyReplaceOnMatch tests that replaceOnMatch works with mergeByKey strategy.
-func TestMergeByKeyReplaceOnMatch(t *testing.T) {
+// TestMergeByKeyDefaultReplaceOnMatch ensures default behavior replaces matching items.
+func TestMergeByKeyDefaultReplaceOnMatch(t *testing.T) {
 	schemaJSON := []byte(`{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -1234,7 +1234,7 @@ func TestMergeByKeyReplaceOnMatch(t *testing.T) {
 						"value": {"type": "integer"}
 					}
 				},
-				"x-kfs-merge": {"strategy": "mergeByKey", "mergeKey": "id", "replaceOnMatch": true}
+				"x-kfs-merge": {"strategy": "mergeByKey", "mergeKey": "id"}
 			}
 		}
 	}`)
@@ -1246,7 +1246,7 @@ func TestMergeByKeyReplaceOnMatch(t *testing.T) {
 
 	// B has item1 with name and value
 	// A has item1 with only value (no name)
-	// With replaceOnMatch=true, A's item should completely replace B's (no name field)
+	// Default replaceOnMatch should replace, so name is removed
 	b := []byte(`{"items": [
 		{"id": "item1", "name": "Original", "value": 100},
 		{"id": "item2", "name": "Second", "value": 200}
@@ -1287,8 +1287,65 @@ func TestMergeByKeyReplaceOnMatch(t *testing.T) {
 	}
 }
 
-// TestMergeByDiscriminatorDeepMergeDefault tests that without replaceOnMatch, deep merge is used.
-func TestMergeByDiscriminatorDeepMergeDefault(t *testing.T) {
+// TestMergeByKeyDeepMergeWhenDisabled ensures replaceOnMatch=false deep merges matching items.
+func TestMergeByKeyDeepMergeWhenDisabled(t *testing.T) {
+	schemaJSON := []byte(`{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"type": "object",
+		"properties": {
+			"items": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"id": {"type": "string"},
+						"name": {"type": "string"},
+						"value": {"type": "integer"}
+					}
+				},
+				"x-kfs-merge": {"strategy": "mergeByKey", "mergeKey": "id", "replaceOnMatch": false}
+			}
+		}
+	}`)
+
+	s, err := LoadSchema(schemaJSON)
+	if err != nil {
+		t.Fatalf("LoadSchema failed: %v", err)
+	}
+
+	b := []byte(`{"items": [
+		{"id": "item1", "name": "Original", "value": 100}
+	]}`)
+	a := []byte(`{"items": [
+		{"id": "item1", "value": 999}
+	]}`)
+
+	result, err := s.Merge(a, b)
+	if err != nil {
+		t.Fatalf("Merge failed: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+
+	items := got["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items length = %d, want 1; got %v", len(items), items)
+	}
+
+	item := items[0].(map[string]any)
+	if item["value"] != float64(999) {
+		t.Errorf("item1.value = %v, want 999", item["value"])
+	}
+	if item["name"] != "Original" {
+		t.Errorf("item1.name = %v, want 'Original' (should deep merge when replaceOnMatch=false)", item["name"])
+	}
+}
+
+// TestMergeByDiscriminatorDeepMergeWhenDisabled tests that replaceOnMatch=false deep merges matching items.
+func TestMergeByDiscriminatorDeepMergeWhenDisabled(t *testing.T) {
 	schemaJSON := []byte(`{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -1303,7 +1360,7 @@ func TestMergeByDiscriminatorDeepMergeDefault(t *testing.T) {
 						"extra": {"type": "string"}
 					}
 				},
-				"x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "type"}
+				"x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "type", "replaceOnMatch": false}
 			}
 		}
 	}`)
@@ -1315,7 +1372,7 @@ func TestMergeByDiscriminatorDeepMergeDefault(t *testing.T) {
 
 	// B has hqdn3d with value:8 and extra:"fromB"
 	// A has hqdn3d with value:12 only (no extra field)
-	// Without replaceOnMatch (default false), deep merge should preserve B's extra field
+	// With replaceOnMatch=false, deep merge should preserve B's extra field
 	b := []byte(`{"filters": [
 		{"type": "hqdn3d", "value": 8, "extra": "fromB"}
 	]}`)

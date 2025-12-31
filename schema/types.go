@@ -68,8 +68,9 @@ type FieldMergeConfig struct {
 	DiscriminatorField string `json:"discriminatorField,omitempty"`
 	// ReplaceOnMatch controls behavior when items with matching keys/discriminators are found.
 	// When true, A's item completely replaces B's item instead of deep merging them.
-	// Applies to mergeByKey and mergeByDiscriminator strategies. Default is false (deep merge).
-	ReplaceOnMatch bool `json:"replaceOnMatch,omitempty"`
+	// Applies to mergeByKey and mergeByDiscriminator strategies.
+	// Nil means "not specified" so defaults can be applied per-strategy.
+	ReplaceOnMatch *bool `json:"replaceOnMatch,omitempty"`
 	// NullHandling overrides global null handling for this field.
 	NullHandling NullHandling `json:"nullHandling,omitempty"`
 }
@@ -80,5 +81,21 @@ func DefaultGlobalConfig() GlobalMergeConfig {
 		DefaultStrategy: StrategyMergeRequest,
 		ArrayStrategy:   StrategyReplace,
 		NullHandling:    NullAsValue,
+	}
+}
+
+// ReplaceOnMatchOrDefault resolves ReplaceOnMatch with strategy-specific defaults.
+// For mergeByKey and mergeByDiscriminator, default is true when unspecified.
+// For other strategies, default is false.
+func (c FieldMergeConfig) ReplaceOnMatchOrDefault() bool {
+	if c.ReplaceOnMatch != nil {
+		return *c.ReplaceOnMatch
+	}
+
+	switch c.Strategy {
+	case StrategyMergeByKey, StrategyMergeByDiscriminator:
+		return true
+	default:
+		return false
 	}
 }

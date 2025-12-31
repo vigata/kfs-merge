@@ -50,9 +50,9 @@ func (m *Merger) mergeValues(a, b any, path string) (any, error) {
 	case schema.StrategyConcatUnique:
 		return m.concatUniqueArrays(a, b)
 	case schema.StrategyMergeByKey:
-		return m.mergeByKey(a, b, config.MergeKey, config.ReplaceOnMatch, path)
+		return m.mergeByKey(a, b, config.MergeKey, config.ReplaceOnMatchOrDefault(), path)
 	case schema.StrategyMergeByDiscriminator:
-		return m.mergeByDiscriminator(a, b, config.DiscriminatorField, config.ReplaceOnMatch, path)
+		return m.mergeByDiscriminator(a, b, config.DiscriminatorField, config.ReplaceOnMatchOrDefault(), path)
 	case schema.StrategyOverlay:
 		return m.overlay(a, b, path)
 	case schema.StrategySum:
