@@ -31,6 +31,7 @@ A Go library for merging JSON instances according to JSON Schema with configurab
 - Multiple merge strategies for different data types
 - Configurable null handling
 - CLI tool included
+- Merge behavior is completely determined by kfs-merge rules and does not depend on go struct contracts (like zero values). All merges have predictable behavior given a set of input, outputs and schemas. 
 
 ## Installation
 

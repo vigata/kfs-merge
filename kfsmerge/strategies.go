@@ -1,4 +1,4 @@
-package merge
+package kfsmerge
 
 import "fmt"
 
@@ -39,14 +39,12 @@ func (m *Merger) concatUniqueArrays(a, b any) (any, error) {
 	seen := make(map[any]bool)
 	result := make([]any, 0, len(arr))
 	for _, item := range arr {
-		// Only primitive types can be map keys
 		if isPrimitive(item) {
 			if !seen[item] {
 				seen[item] = true
 				result = append(result, item)
 			}
 		} else {
-			// For non-primitives, always include (can't easily dedupe)
 			result = append(result, item)
 		}
 	}
@@ -142,8 +140,6 @@ func isPrimitive(v any) bool {
 }
 
 // mergeByKey merges two arrays of objects by a key field.
-// Items with matching keys are merged (or replaced if replaceOnMatch is true);
-// items only in A or B are included.
 func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path string) (any, error) {
 	aArr, aIsArr := a.([]any)
 	bArr, bIsArr := b.([]any)
@@ -159,7 +155,6 @@ func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path
 		return bArr, nil
 	}
 
-	// Build index of B items by key
 	bIndex := make(map[any]int)
 	for i, item := range bArr {
 		if obj, ok := item.(map[string]any); ok {
@@ -169,11 +164,9 @@ func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path
 		}
 	}
 
-	// Track which B items have been merged
 	bMerged := make(map[int]bool)
-
-	// Process A items, merging with B where keys match
 	result := make([]any, 0, len(aArr)+len(bArr))
+
 	for i, aItem := range aArr {
 		aObj, aIsObj := aItem.(map[string]any)
 		if !aIsObj {
@@ -193,12 +186,9 @@ func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path
 			continue
 		}
 
-		// Handle matching key: either replace or deep merge
 		if replaceOnMatch {
-			// Replace: use A's item entirely, discard B's item
 			result = append(result, aItem)
 		} else {
-			// Deep merge: A's fields override B's, but B's fields are preserved
 			bItem := bArr[bIdx]
 			itemPath := fmt.Sprintf("%s/%d", path, i)
 			merged, err := m.deepMerge(aItem, bItem, itemPath)
@@ -210,7 +200,6 @@ func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path
 		bMerged[bIdx] = true
 	}
 
-	// Add B items that weren't merged
 	for i, bItem := range bArr {
 		if !bMerged[i] {
 			result = append(result, bItem)
@@ -221,9 +210,6 @@ func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path
 }
 
 // mergeByDiscriminator merges two arrays of discriminated union objects.
-// Items with matching discriminator values are deep merged (or replaced if replaceOnMatch is true);
-// items only in A or B are included.
-// This is useful for oneOf arrays where each object has a "type" field indicating its variant.
 func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, replaceOnMatch bool, path string) (any, error) {
 	aArr, aIsArr := a.([]any)
 	bArr, bIsArr := b.([]any)
@@ -240,12 +226,9 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 	}
 
 	if discriminatorField == "" {
-		discriminatorField = "type" // Default to "type" as discriminator
+		discriminatorField = "type"
 	}
 
-	// Build index of B items by discriminator value
-	// Note: For discriminated unions, we expect at most one item per discriminator value,
-	// but we'll handle multiple by keeping the first one.
 	bIndex := make(map[any]int)
 	for i, item := range bArr {
 		if obj, ok := item.(map[string]any); ok {
@@ -257,11 +240,9 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 		}
 	}
 
-	// Track which B items have been merged
 	bMerged := make(map[int]bool)
-
-	// Process A items, merging with B where discriminators match
 	result := make([]any, 0, len(aArr)+len(bArr))
+
 	for i, aItem := range aArr {
 		aObj, aIsObj := aItem.(map[string]any)
 		if !aIsObj {
@@ -277,17 +258,13 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 
 		bIdx, bHasDisc := bIndex[aDiscValue]
 		if !bHasDisc {
-			// A has a new type that B doesn't have
 			result = append(result, aItem)
 			continue
 		}
 
-		// Handle matching discriminator: either replace or deep merge
 		if replaceOnMatch {
-			// Replace: use A's item entirely, discard B's item
 			result = append(result, aItem)
 		} else {
-			// Deep merge: A's fields override B's, but B's fields are preserved
 			bItem := bArr[bIdx]
 			itemPath := fmt.Sprintf("%s/%d", path, i)
 			merged, err := m.deepMerge(aItem, bItem, itemPath)
@@ -299,7 +276,6 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 		bMerged[bIdx] = true
 	}
 
-	// Add B items that weren't merged (preserving types not in A)
 	for i, bItem := range bArr {
 		if !bMerged[i] {
 			result = append(result, bItem)
@@ -310,64 +286,48 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 }
 
 // overlay merges A into B, but only applies fields that A explicitly provides.
-// Unlike deepMerge, overlay treats the entire A object as a partial update.
-// Fields in A are applied to B; fields not in A are left unchanged from B.
-// This is useful for PATCH-like semantics where A represents only the changes.
 func (m *Merger) overlay(a, b any, path string) (any, error) {
 	aMap, aIsMap := a.(map[string]any)
 	bMap, bIsMap := b.(map[string]any)
 
-	// If A is nil, use B
 	if a == nil {
 		return b, nil
 	}
-
-	// If B is nil, use A
 	if b == nil {
 		return a, nil
 	}
 
-	// If not both maps, A wins (like mergeRequest)
 	if !aIsMap || !bIsMap {
 		return a, nil
 	}
 
-	// Start with a copy of B
 	result := make(map[string]any)
 	for k, v := range bMap {
 		result[k] = v
 	}
 
-	// Apply A's values as an overlay (only fields A has are considered)
 	for k, aVal := range aMap {
 		fieldPath := path + "/" + k
 		bVal, bHasKey := bMap[k]
 
-		// Check null handling for this field
 		nullHandling := m.schema.NullHandlingFor(fieldPath)
-
-		// If A's value is null and nullHandling is asAbsent, skip (keep B's value)
 		if aVal == nil && nullHandling == "asAbsent" {
 			continue
 		}
 
 		if !bHasKey {
-			// A has a key B doesn't have
 			result[k] = aVal
 		} else {
-			// Both have the key - recursively overlay if both are objects
 			aValMap, aIsMap := aVal.(map[string]any)
 			bValMap, bIsMap := bVal.(map[string]any)
 
 			if aIsMap && bIsMap {
-				// Recursively overlay nested objects
 				merged, err := m.overlay(aValMap, bValMap, fieldPath)
 				if err != nil {
 					return nil, err
 				}
 				result[k] = merged
 			} else {
-				// A's value overwrites B's
 				result[k] = aVal
 			}
 		}

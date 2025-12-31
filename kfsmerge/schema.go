@@ -1,9 +1,10 @@
-package schema
+package kfsmerge
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -13,35 +14,35 @@ const MergeExtensionKey = "x-kfs-merge"
 
 // Schema represents a parsed JSON Schema with merge extensions.
 type Schema struct {
-	// compiled is the compiled JSON Schema for validation.
-	compiled *jsonschema.Schema
-	// raw is the raw schema JSON for extension parsing.
-	raw map[string]any
-	// globalConfig holds schema-level merge configuration.
+	compiled     *jsonschema.Schema
+	raw          map[string]any
 	globalConfig GlobalMergeConfig
-	// fieldConfigs holds per-field merge configurations, keyed by JSON pointer.
 	fieldConfigs map[string]FieldMergeConfig
-	// defConfigs holds merge configurations from $defs, keyed by definition name.
-	defConfigs map[string]FieldMergeConfig
-	// refToDefName maps instance paths to their $defs type name for config lookup.
+	defConfigs   map[string]FieldMergeConfig
 	refToDefName map[string]string
 }
 
-// Load parses a JSON Schema with x-kfs-merge extensions.
-func Load(schemaJSON []byte) (*Schema, error) {
-	// Parse raw JSON to extract extensions
+// LoadSchemaFromFile loads a JSON Schema from a file path.
+func LoadSchemaFromFile(path string) (*Schema, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read schema file: %w", err)
+	}
+	return LoadSchema(data)
+}
+
+// LoadSchema parses a JSON Schema with x-kfs-merge extensions.
+func LoadSchema(schemaJSON []byte) (*Schema, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(schemaJSON, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse schema JSON: %w", err)
 	}
 
-	// Use jsonschema.UnmarshalJSON to get the properly typed value
 	schemaValue, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON))
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal schema: %w", err)
 	}
 
-	// Compile schema for validation
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource("schema.json", schemaValue); err != nil {
 		return nil, fmt.Errorf("failed to add schema resource: %w", err)
@@ -61,17 +62,14 @@ func Load(schemaJSON []byte) (*Schema, error) {
 		refToDefName: make(map[string]string),
 	}
 
-	// Parse global merge config
 	if err := s.parseGlobalConfig(); err != nil {
 		return nil, fmt.Errorf("failed to parse global merge config: %w", err)
 	}
 
-	// Parse $defs first so we can reference them
 	if err := s.parseDefsConfigs(); err != nil {
 		return nil, fmt.Errorf("failed to parse $defs merge configs: %w", err)
 	}
 
-	// Parse per-field merge configs (including $ref resolution)
 	if err := s.parseFieldConfigs("", raw); err != nil {
 		return nil, fmt.Errorf("failed to parse field merge configs: %w", err)
 	}
@@ -83,7 +81,7 @@ func Load(schemaJSON []byte) (*Schema, error) {
 func (s *Schema) parseGlobalConfig() error {
 	mergeRaw, ok := s.raw[MergeExtensionKey]
 	if !ok {
-		return nil // No global config, use defaults
+		return nil
 	}
 
 	mergeMap, ok := mergeRaw.(map[string]any)
@@ -108,7 +106,7 @@ func (s *Schema) parseGlobalConfig() error {
 func (s *Schema) parseDefsConfigs() error {
 	defs, ok := s.raw["$defs"].(map[string]any)
 	if !ok {
-		return nil // No $defs, nothing to do
+		return nil
 	}
 
 	for defName, defValue := range defs {
@@ -117,7 +115,6 @@ func (s *Schema) parseDefsConfigs() error {
 			continue
 		}
 
-		// Check for x-kfs-merge at the type level
 		if mergeRaw, ok := defMap[MergeExtensionKey]; ok {
 			mergeMap, ok := mergeRaw.(map[string]any)
 			if !ok {
@@ -143,7 +140,6 @@ func (s *Schema) parseDefsConfigs() error {
 			s.defConfigs[defName] = config
 		}
 
-		// Also parse nested properties within the definition
 		if err := s.parseDefFieldConfigs(defName, "", defMap); err != nil {
 			return err
 		}
@@ -153,9 +149,7 @@ func (s *Schema) parseDefsConfigs() error {
 }
 
 // parseDefFieldConfigs parses field configs within a $defs definition.
-// It stores configs keyed by "defName:fieldPath" for later lookup.
 func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any) error {
-	// Check for x-kfs-merge at this level (skip root of def, handled by parseDefsConfigs)
 	if path != "" {
 		if mergeRaw, ok := node[MergeExtensionKey]; ok {
 			mergeMap, ok := mergeRaw.(map[string]any)
@@ -179,12 +173,10 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
 				config.NullHandling = NullHandling(nullHandling)
 			}
-			// Store with defName:path key for lookup
 			s.defConfigs[defName+":"+path] = config
 		}
 	}
 
-	// Recurse into properties
 	if props, ok := node["properties"].(map[string]any); ok {
 		for propName, propValue := range props {
 			propPath := path + "/" + propName
@@ -196,7 +188,6 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 		}
 	}
 
-	// Recurse into items
 	if items, ok := node["items"].(map[string]any); ok {
 		itemsPath := path + "/items"
 		if err := s.parseDefFieldConfigs(defName, itemsPath, items); err != nil {
@@ -208,9 +199,7 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 }
 
 // resolveRef resolves a $ref string to the definition name.
-// Returns the definition name and true if it's a local $defs reference.
 func (s *Schema) resolveRef(ref string) (string, bool) {
-	// Handle local $defs references like "#/$defs/SomeType"
 	const defsPrefix = "#/$defs/"
 	if len(ref) > len(defsPrefix) && ref[:len(defsPrefix)] == defsPrefix {
 		return ref[len(defsPrefix):], true
@@ -220,14 +209,10 @@ func (s *Schema) resolveRef(ref string) (string, bool) {
 
 // parseFieldConfigs recursively extracts per-field x-kfs-merge configurations.
 func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
-	// Check for $ref and track the mapping
 	if ref, ok := node["$ref"].(string); ok {
 		if defName, isLocal := s.resolveRef(ref); isLocal {
 			s.refToDefName[path] = defName
-
-			// If the $ref target has a merge config, apply it to this path
 			if config, ok := s.defConfigs[defName]; ok {
-				// Only set if not already set (direct config takes precedence)
 				if _, exists := s.fieldConfigs[path]; !exists {
 					s.fieldConfigs[path] = config
 				}
@@ -235,9 +220,8 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 		}
 	}
 
-	// Check for x-kfs-merge at this level
 	if mergeRaw, ok := node[MergeExtensionKey]; ok {
-		if path != "" { // Skip root level (that's global config)
+		if path != "" {
 			mergeMap, ok := mergeRaw.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%s at %s must be an object", MergeExtensionKey, path)
@@ -263,14 +247,12 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 		}
 	}
 
-	// Handle anyOf - check for $ref in each alternative
 	if anyOf, ok := node["anyOf"].([]any); ok {
 		for _, alt := range anyOf {
 			if altMap, ok := alt.(map[string]any); ok {
 				if ref, ok := altMap["$ref"].(string); ok {
 					if defName, isLocal := s.resolveRef(ref); isLocal {
 						s.refToDefName[path] = defName
-						// Apply def config if no direct config exists
 						if config, ok := s.defConfigs[defName]; ok {
 							if _, exists := s.fieldConfigs[path]; !exists {
 								s.fieldConfigs[path] = config
@@ -282,14 +264,11 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 		}
 	}
 
-	// Handle oneOf - check for $ref in each alternative
 	if oneOf, ok := node["oneOf"].([]any); ok {
 		for _, alt := range oneOf {
 			if altMap, ok := alt.(map[string]any); ok {
 				if ref, ok := altMap["$ref"].(string); ok {
 					if defName, isLocal := s.resolveRef(ref); isLocal {
-						// For oneOf, track the first def found (discriminated unions
-						// will need more sophisticated handling later)
 						if _, exists := s.refToDefName[path]; !exists {
 							s.refToDefName[path] = defName
 						}
@@ -299,7 +278,6 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 		}
 	}
 
-	// Recurse into properties
 	if props, ok := node["properties"].(map[string]any); ok {
 		for propName, propValue := range props {
 			propPath := path + "/" + propName
@@ -311,7 +289,6 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 		}
 	}
 
-	// Recurse into items (for arrays)
 	if items, ok := node["items"].(map[string]any); ok {
 		itemsPath := path + "/items"
 		if err := s.parseFieldConfigs(itemsPath, items); err != nil {
@@ -328,21 +305,15 @@ func (s *Schema) GlobalConfig() GlobalMergeConfig {
 }
 
 // FieldConfig returns the merge configuration for a specific field path.
-// It first checks for direct field configs, then looks up configs from $defs
-// based on the path's type reference.
 func (s *Schema) FieldConfig(path string) (FieldMergeConfig, bool) {
-	// First, check for direct field config
 	if config, ok := s.fieldConfigs[path]; ok {
 		return config, true
 	}
 
-	// Check if this path has a $ref mapping and look up nested def configs
-	// Walk up the path to find the closest $ref and compute the relative path
 	for basePath := range s.refToDefName {
 		if len(path) > len(basePath) && path[:len(basePath)] == basePath {
 			defName := s.refToDefName[basePath]
 			relativePath := path[len(basePath):]
-			// Look up the def config with the relative path
 			if config, ok := s.defConfigs[defName+":"+relativePath]; ok {
 				return config, true
 			}
@@ -353,7 +324,6 @@ func (s *Schema) FieldConfig(path string) (FieldMergeConfig, bool) {
 }
 
 // NullHandlingFor returns the null handling setting for a specific field path.
-// If no field-specific setting exists, returns the global setting.
 func (s *Schema) NullHandlingFor(path string) NullHandling {
 	if config, ok := s.fieldConfigs[path]; ok && config.NullHandling != "" {
 		return config.NullHandling

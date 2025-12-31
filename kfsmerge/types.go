@@ -1,18 +1,24 @@
-// Package schema handles JSON Schema loading and parsing with x-kfs-merge extensions.
-package schema
+// Package kfsmerge provides JSON Schema-based merging of JSON instances.
+//
+// It validates two JSON instances (A and B) against a schema, merges them
+// according to rules embedded in the schema using x-kfs-merge extensions,
+// and validates the result.
+//
+// When merging using Merge(a, b):
+//   - A (first parameter) is the request/override instance (typically API request or user input)
+//   - B (second parameter) is the base/template instance (typically defaults or template configuration)
+//   - By default, A takes precedence over B (request overrides base)
+package kfsmerge
 
 // MergeStrategy defines how two values should be merged.
 type MergeStrategy string
 
 const (
 	// StrategyMergeRequest uses the request's (A) value if present, otherwise the base's (B) value (default).
-	// A is typically an API request or user input; B is typically a template or default configuration.
 	StrategyMergeRequest MergeStrategy = "mergeRequest"
 	// StrategyKeepBase always uses the base's (B) value, ignoring the request (A).
-	// Use for immutable template defaults or system-controlled values.
 	StrategyKeepBase MergeStrategy = "keepBase"
 	// StrategyKeepRequest always uses the request's (A) value, ignoring the base (B).
-	// Use when the user must explicitly provide a value with no fallback to defaults.
 	StrategyKeepRequest MergeStrategy = "keepRequest"
 	// StrategyDeepMerge recursively merges objects.
 	StrategyDeepMerge MergeStrategy = "deepMerge"
@@ -50,29 +56,18 @@ const (
 
 // GlobalMergeConfig holds schema-level merge configuration.
 type GlobalMergeConfig struct {
-	// DefaultStrategy is the default merge strategy for all fields.
 	DefaultStrategy MergeStrategy `json:"defaultStrategy,omitempty"`
-	// ArrayStrategy is the default strategy for array fields.
-	ArrayStrategy MergeStrategy `json:"arrayStrategy,omitempty"`
-	// NullHandling controls how explicit null values are handled.
-	NullHandling NullHandling `json:"nullHandling,omitempty"`
+	ArrayStrategy   MergeStrategy `json:"arrayStrategy,omitempty"`
+	NullHandling    NullHandling  `json:"nullHandling,omitempty"`
 }
 
 // FieldMergeConfig holds per-field merge configuration.
 type FieldMergeConfig struct {
-	// Strategy is the merge strategy for this field.
-	Strategy MergeStrategy `json:"strategy,omitempty"`
-	// MergeKey is the key field name for mergeByKey strategy (arrays of objects).
-	MergeKey string `json:"mergeKey,omitempty"`
-	// DiscriminatorField is the field name for mergeByDiscriminator strategy (oneOf unions).
-	DiscriminatorField string `json:"discriminatorField,omitempty"`
-	// ReplaceOnMatch controls behavior when items with matching keys/discriminators are found.
-	// When true, A's item completely replaces B's item instead of deep merging them.
-	// Applies to mergeByKey and mergeByDiscriminator strategies.
-	// Nil means "not specified" so defaults can be applied per-strategy.
-	ReplaceOnMatch *bool `json:"replaceOnMatch,omitempty"`
-	// NullHandling overrides global null handling for this field.
-	NullHandling NullHandling `json:"nullHandling,omitempty"`
+	Strategy           MergeStrategy `json:"strategy,omitempty"`
+	MergeKey           string        `json:"mergeKey,omitempty"`
+	DiscriminatorField string        `json:"discriminatorField,omitempty"`
+	ReplaceOnMatch     *bool         `json:"replaceOnMatch,omitempty"`
+	NullHandling       NullHandling  `json:"nullHandling,omitempty"`
 }
 
 // DefaultGlobalConfig returns GlobalMergeConfig with default values.
@@ -85,13 +80,10 @@ func DefaultGlobalConfig() GlobalMergeConfig {
 }
 
 // ReplaceOnMatchOrDefault resolves ReplaceOnMatch with strategy-specific defaults.
-// For mergeByKey and mergeByDiscriminator, default is true when unspecified.
-// For other strategies, default is false.
 func (c FieldMergeConfig) ReplaceOnMatchOrDefault() bool {
 	if c.ReplaceOnMatch != nil {
 		return *c.ReplaceOnMatch
 	}
-
 	switch c.Strategy {
 	case StrategyMergeByKey, StrategyMergeByDiscriminator:
 		return true
@@ -99,3 +91,25 @@ func (c FieldMergeConfig) ReplaceOnMatchOrDefault() bool {
 		return false
 	}
 }
+
+// MergeOptions controls the merge and validation behavior.
+type MergeOptions struct {
+	SkipValidateA      bool
+	SkipValidateB      bool
+	SkipValidateResult bool
+}
+
+// DefaultMergeOptions returns the default options (all validations enabled).
+func DefaultMergeOptions() MergeOptions {
+	return MergeOptions{}
+}
+
+// ValidationPhase indicates which stage of the merge process a validation error occurred.
+type ValidationPhase string
+
+const (
+	PhaseValidateA      ValidationPhase = "validate_a"
+	PhaseValidateB      ValidationPhase = "validate_b"
+	PhaseValidateResult ValidationPhase = "validate_result"
+)
+

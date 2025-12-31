@@ -6,7 +6,11 @@ type: "always_apply"
 
 ## Test Structure and Organization
 
-- **File Naming:** Test files must be named `*_test.go` in the same package as the code being tested.
+- **File Naming:** Test files must be named `{source_file}_{differentiator}_test.go` where:
+  - `{source_file}` is the name of the source file being tested (without `.go` extension)
+  - `{differentiator}` describes the aspect or category of tests
+  - Examples: `api_basic_test.go`, `strategies_array_test.go`, `schema_ref_test.go`, `validator_test.go`
+  - For simple cases with a single test file per source, use `{source_file}_test.go` (e.g., `validator_test.go`)
 - **Function Naming:** Test functions must start with `Test` followed by the name of the function or behavior being tested: `TestFunctionName` or `TestTypeName_MethodName`.
 - **Same Package:** Place tests in the same package to test unexported functions. Use `_test` suffix package (e.g., `package foo_test`) for black-box testing of exported API only.
 - **Testdata Directory:** Use a `testdata/` directory for test fixtures. Go tooling ignores this directory.

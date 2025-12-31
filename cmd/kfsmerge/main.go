@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	kfsmerge "github.com/nbcuni/kfs-flow-merge"
+	"github.com/nbcuni/kfs-flow-merge/kfsmerge"
 )
 
 func main() {
@@ -123,7 +123,7 @@ func main() {
 	}
 }
 
-func validateFile(schema *kfsmerge.Schema, path, name string) error {
+func validateFile(schema *kfsmerge.Schema, path, _ string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
