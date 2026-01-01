@@ -14,30 +14,20 @@ package kfsmerge
 type MergeStrategy string
 
 const (
-	// StrategyMergeRequest uses the request's (A) value if present, otherwise the base's (B) value (default).
-	StrategyMergeRequest MergeStrategy = "mergeRequest"
 	// StrategyKeepBase always uses the base's (B) value, ignoring the request (A).
 	StrategyKeepBase MergeStrategy = "keepBase"
 	// StrategyKeepRequest always uses the request's (A) value, ignoring the base (B).
 	StrategyKeepRequest MergeStrategy = "keepRequest"
-	// StrategyDeepMerge recursively merges objects.
+	// StrategyDeepMerge recursively merges objects, with A winning on conflict. Respects nullHandling. (default)
 	StrategyDeepMerge MergeStrategy = "deepMerge"
 	// StrategyReplace replaces B's value with A's entirely (default for arrays).
 	StrategyReplace MergeStrategy = "replace"
-	// StrategyConcat appends A's array items to B's.
+	// StrategyConcat appends A's array items to B's. Use Unique option to deduplicate.
 	StrategyConcat MergeStrategy = "concat"
-	// StrategyConcatUnique appends A's items to B's, removing duplicates.
-	StrategyConcatUnique MergeStrategy = "concatUnique"
 	// StrategyMergeByDiscriminator merges array items by discriminator field.
 	StrategyMergeByDiscriminator MergeStrategy = "mergeByDiscriminator"
-	// StrategyOverlay only applies A's explicitly provided fields to B, preserving B's other fields.
-	StrategyOverlay MergeStrategy = "overlay"
-	// StrategySum adds numeric values.
-	StrategySum MergeStrategy = "sum"
-	// StrategyMax takes the larger numeric value.
-	StrategyMax MergeStrategy = "max"
-	// StrategyMin takes the smaller numeric value.
-	StrategyMin MergeStrategy = "min"
+	// StrategyNumeric performs numeric operations (sum, max, min) based on Operation option.
+	StrategyNumeric MergeStrategy = "numeric"
 )
 
 // NullHandling defines how explicit null values are handled during merge.
@@ -66,12 +56,30 @@ type FieldMergeConfig struct {
 	DiscriminatorField string        `json:"discriminatorField,omitempty"`
 	ReplaceOnMatch     *bool         `json:"replaceOnMatch,omitempty"`
 	NullHandling       NullHandling  `json:"nullHandling,omitempty"`
+	Unique             *bool         `json:"unique,omitempty"`    // For concat strategy: deduplicate items
+	Operation          string        `json:"operation,omitempty"` // For numeric strategy: "sum", "max", "min"
+}
+
+// UniqueOrDefault returns the Unique setting with default false.
+func (c FieldMergeConfig) UniqueOrDefault() bool {
+	if c.Unique != nil {
+		return *c.Unique
+	}
+	return false
+}
+
+// OperationOrDefault returns the Operation setting with default "sum".
+func (c FieldMergeConfig) OperationOrDefault() string {
+	if c.Operation != "" {
+		return c.Operation
+	}
+	return "sum"
 }
 
 // DefaultGlobalConfig returns GlobalMergeConfig with default values.
 func DefaultGlobalConfig() GlobalMergeConfig {
 	return GlobalMergeConfig{
-		DefaultStrategy: StrategyMergeRequest,
+		DefaultStrategy: StrategyDeepMerge,
 		ArrayStrategy:   StrategyReplace,
 		NullHandling:    NullAsValue,
 	}

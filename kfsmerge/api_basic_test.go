@@ -104,7 +104,7 @@ func TestMergeFromFiles(t *testing.T) {
 	schemaJSON := `{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
-		"x-kfs-merge": {"defaultStrategy": "mergeRequest"},
+		"x-kfs-merge": {"defaultStrategy": "deepMerge"},
 		"properties": {
 			"name": {"type": "string"},
 			"count": {"type": "integer"}
@@ -152,4 +152,3 @@ func TestMergeFromFiles(t *testing.T) {
 		t.Errorf("count = %v, want 100", got["count"])
 	}
 }
-

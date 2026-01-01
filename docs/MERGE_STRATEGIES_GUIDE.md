@@ -4,18 +4,13 @@
 
 - [Introduction](#introduction)
 - [Strategy Reference](#strategy-reference)
-  - [1. mergeRequest (Default)](#1-mergerequest-default)
+  - [1. deepMerge (Default)](#1-deepmerge-default)
   - [2. keepBase](#2-keepbase)
   - [3. keepRequest](#3-keeprequest)
-  - [4. deepMerge](#4-deepmerge)
-  - [5. replace](#5-replace)
-  - [6. concat](#6-concat)
-  - [7. concatUnique](#7-concatunique)
-  - [8. mergeByDiscriminator](#8-mergebydiscriminator)
-  - [9. overlay](#9-overlay)
-  - [10. sum](#10-sum)
-  - [11. max](#11-max)
-  - [12. min](#12-min)
+  - [4. replace](#4-replace)
+  - [5. concat](#5-concat)
+  - [6. mergeByDiscriminator](#6-mergebydiscriminator)
+  - [7. numeric](#7-numeric)
 - [Best Practices](#best-practices)
 - [Common Pitfalls to Avoid](#common-pitfalls-to-avoid)
 - [Complete Real-World Example](#complete-real-world-example)
@@ -25,7 +20,7 @@
 
 ## Introduction
 
-The kfs-flow-merge library provides 12 distinct merge strategies to control how JSON instances are combined. Each strategy is configured using the `x-kfs-merge` extension in your JSON Schema, allowing fine-grained control over merge behavior at every level of your data structure.
+The kfs-flow-merge library provides 7 distinct merge strategies to control how JSON instances are combined. Each strategy is configured using the `x-kfs-merge` extension in your JSON Schema, allowing fine-grained control over merge behavior at every level of your data structure.
 
 ### Core Concept
 
@@ -44,7 +39,9 @@ By default, A takes precedence over B (request overrides base), but each strateg
     "strategy": "strategyName",
     "discriminatorField": "type",     // For mergeByDiscriminator strategy
     "replaceOnMatch": true,           // Default for mergeByDiscriminator (set false to deep merge matches)
-    "defaultStrategy": "mergeRequest", // Default for all fields
+    "unique": true,                   // For concat strategy: deduplicate items
+    "operation": "sum",               // For numeric strategy: "sum", "max", or "min"
+    "defaultStrategy": "deepMerge",   // Default for all fields
     "arrayStrategy": "replace",       // Default for arrays
     "nullHandling": "asAbsent"        // How to treat null values
   }
@@ -55,14 +52,15 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ## Strategy Reference
 
-### 1. mergeRequest (Default)
+### 1. deepMerge (Default)
 
-**Description**: The request's (A) value wins if present and non-null, otherwise the base's (B) value is used. For objects, performs recursive deep merge.
+**Description**: Recursively merges objects field-by-field. For each field, A's value wins if present, otherwise B's value is used. Respects `nullHandling` configuration for null values. This is the default strategy for all non-array fields.
 
 **When to Use**:
 - Default behavior for most fields
 - API requests overriding template defaults
-- Standard configuration merging
+- Nested configuration objects
+- Complex hierarchical data structures
 
 **Example**:
 
@@ -70,10 +68,18 @@ By default, A takes precedence over B (request overrides base), but each strateg
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "x-kfs-merge": {"defaultStrategy": "mergeRequest"},
+  "x-kfs-merge": {"defaultStrategy": "deepMerge"},
   "properties": {
     "job_timeout_seconds": {"type": "integer"},
-    "max_attempts": {"type": "integer"}
+    "max_attempts": {"type": "integer"},
+    "database": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer"},
+        "ssl": {"type": "boolean"}
+      }
+    }
   }
 }
 ```
@@ -81,7 +87,10 @@ By default, A takes precedence over B (request overrides base), but each strateg
 **Input A** (API Request):
 ```json
 {
-  "job_timeout_seconds": 3600
+  "job_timeout_seconds": 3600,
+  "database": {
+    "port": 5433
+  }
 }
 ```
 
@@ -89,7 +98,12 @@ By default, A takes precedence over B (request overrides base), but each strateg
 ```json
 {
   "job_timeout_seconds": 86400,
-  "max_attempts": 10
+  "max_attempts": 10,
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "ssl": true
+  }
 }
 ```
 
@@ -97,11 +111,19 @@ By default, A takes precedence over B (request overrides base), but each strateg
 ```json
 {
   "job_timeout_seconds": 3600,
-  "max_attempts": 10
+  "max_attempts": 10,
+  "database": {
+    "host": "localhost",
+    "port": 5433,
+    "ssl": true
+  }
 }
 ```
 
-**Explanation**: A's `job_timeout_seconds` (3600) overrides B's value. A doesn't specify `max_attempts`, so B's value (10) is preserved.
+**Explanation**:
+- A's `job_timeout_seconds` (3600) overrides B's value
+- A doesn't specify `max_attempts`, so B's value (10) is preserved
+- The `database` object is merged field-by-field: A's `port` (5433) overrides B's, while `host` and `ssl` from B are preserved
 
 ---
 
@@ -154,7 +176,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 }
 ```
 
-**Explanation**: `retry_mode` uses `keepBase`, so B's "standard" is preserved despite A specifying "aggressive". `max_attempts` uses default `mergeRequest`, so A's 20 wins.
+**Explanation**: `retry_mode` uses `keepBase`, so B's "standard" is preserved despite A specifying "aggressive". `max_attempts` uses default `deepMerge`, so A's 20 wins.
 
 ---
 
@@ -207,71 +229,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ---
 
-### 4. deepMerge
-
-**Description**: Recursively merges objects field-by-field. For each field, A's value wins if present, otherwise B's value is used. Similar to `mergeRight` but explicitly recursive.
-
-**When to Use**:
-- Nested configuration objects
-- Complex hierarchical data structures
-- When you want field-level granularity in nested objects
-
-**Example**:
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "database": {
-      "type": "object",
-      "x-kfs-merge": {"strategy": "deepMerge"},
-      "properties": {
-        "host": {"type": "string"},
-        "port": {"type": "integer"},
-        "ssl": {"type": "boolean"}
-      }
-    }
-  }
-}
-```
-
-**Input A** (API Request):
-```json
-{
-  "database": {
-    "port": 5433
-  }
-}
-```
-
-**Input B** (Template):
-```json
-{
-  "database": {
-    "host": "localhost",
-    "port": 5432,
-    "ssl": true
-  }
-}
-```
-
-**Result**:
-```json
-{
-  "database": {
-    "host": "localhost",
-    "port": 5433,
-    "ssl": true
-  }
-}
-```
-
-**Explanation**: The `database` object is merged field-by-field. A's `port` (5433) overrides B's, while `host` and `ssl` from B are preserved since A doesn't specify them.
-
----
-
-### 5. replace
+### 4. replace
 
 **Description**: Completely replaces B's value with A's value. No merging occurs. This is the default strategy for arrays.
 
@@ -321,16 +279,20 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ---
 
-### 6. concat
+### 5. concat
 
-**Description**: Concatenates arrays by appending A's items to B's items. Order: B's items first, then A's items.
+**Description**: Concatenates arrays by appending A's items to B's items. Order: B's items first, then A's items. Use the `unique` option to remove duplicate primitive values.
+
+**Options**:
+- `unique` (boolean, default: false): When true, removes duplicate primitive values after concatenation. Non-primitive values (objects, arrays) are always included.
 
 **When to Use**:
 - Additive lists (tags, labels, flags)
 - Accumulating values from both sources
 - When both A and B contribute items
+- With `unique: true` for tag arrays where duplicates are meaningless
 
-**Example**:
+**Example (basic concat)**:
 
 ```json
 {
@@ -369,18 +331,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 **Explanation**: B's tags come first, followed by A's tags. Duplicates are allowed. Total length is the sum of both arrays.
 
----
-
-### 7. concatUnique
-
-**Description**: Concatenates arrays like `concat`, but removes duplicate primitive values. Non-primitive values (objects, arrays) are always included.
-
-**When to Use**:
-- Tag arrays where duplicates are meaningless
-- Unique identifiers or names
-- When you want additive behavior without redundancy
-
-**Example**:
+**Example (concat with unique)**:
 
 ```json
 {
@@ -390,7 +341,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
     "tags": {
       "type": "array",
       "items": {"type": "string"},
-      "x-kfs-merge": {"strategy": "concatUnique"}
+      "x-kfs-merge": {"strategy": "concat", "unique": true}
     }
   }
 }
@@ -421,7 +372,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ---
 
-### 8. mergeByDiscriminator
+### 6. mergeByDiscriminator
 
 **Description**: Merges arrays of discriminated union objects (oneOf/anyOf) by matching on a discriminator field (typically "type"). By default, matching items are **replaced** (A’s item fully replaces B’s). Set `replaceOnMatch: false` to deep merge matching items instead.
 
@@ -508,84 +459,19 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 ---
 
-### 9. overlay
+### 7. numeric
 
-**Description**: Applies A as a partial update (PATCH-like). Only fields explicitly present in A are applied to B. Fields not in A remain unchanged from B. Respects `nullHandling: "asAbsent"`.
+**Description**: Performs numeric operations on two values. Supports sum, max, and min operations via the `operation` option. If one value is missing, returns the other. Requires both values to be numbers.
 
-**When to Use**:
-- PATCH-style API updates
-- Partial configuration overrides
-- When you want to distinguish between "not provided" and "set to null"
-
-**Example**:
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "config": {
-      "type": "object",
-      "x-kfs-merge": {"strategy": "overlay"},
-      "properties": {
-        "host": {"type": "string"},
-        "port": {"type": "integer"},
-        "timeout": {"type": "integer"},
-        "debug": {"type": "boolean"}
-      }
-    }
-  }
-}
-```
-
-**Input A** (API Request):
-```json
-{
-  "config": {
-    "host": "production",
-    "debug": true
-  }
-}
-```
-
-**Input B** (Template):
-```json
-{
-  "config": {
-    "host": "localhost",
-    "port": 5432,
-    "timeout": 30,
-    "debug": false
-  }
-}
-```
-
-**Result**:
-```json
-{
-  "config": {
-    "host": "production",
-    "port": 5432,
-    "timeout": 30,
-    "debug": true
-  }
-}
-```
-
-**Explanation**: A only specifies `host` and `debug`, so only those fields are updated. B's `port` and `timeout` are preserved because A didn't mention them. This differs from `deepMerge` in how it handles null values and absent fields.
-
----
-
-### 10. sum
-
-**Description**: Adds two numeric values together. If one value is missing, returns the other. Requires both values to be numbers.
+**Options**:
+- `operation` (string, default: "sum"): The numeric operation to perform. Valid values: "sum", "max", "min"
 
 **When to Use**:
-- Counters and accumulators
-- Combining quotas or limits
-- Additive numeric values
+- `sum`: Counters and accumulators, combining quotas or limits
+- `max`: Maximum limits or thresholds, taking the higher priority value
+- `min`: Minimum thresholds or constraints, resource limits
 
-**Example**:
+**Example (sum operation)**:
 
 ```json
 {
@@ -594,7 +480,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
   "properties": {
     "total_requests": {
       "type": "integer",
-      "x-kfs-merge": {"strategy": "sum"}
+      "x-kfs-merge": {"strategy": "numeric", "operation": "sum"}
     }
   }
 }
@@ -623,18 +509,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 **Explanation**: 150 + 50 = 200. Both values are added together.
 
----
-
-### 11. max
-
-**Description**: Returns the larger of two numeric values. If one value is missing, returns the other.
-
-**When to Use**:
-- Maximum limits or thresholds
-- Taking the higher priority value
-- Capacity planning
-
-**Example**:
+**Example (max operation)**:
 
 ```json
 {
@@ -643,7 +518,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
   "properties": {
     "max_concurrent_requests": {
       "type": "integer",
-      "x-kfs-merge": {"strategy": "max"}
+      "x-kfs-merge": {"strategy": "numeric", "operation": "max"}
     }
   }
 }
@@ -672,18 +547,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 **Explanation**: 8 is greater than 4, so 8 is returned.
 
----
-
-### 12. min
-
-**Description**: Returns the smaller of two numeric values. If one value is missing, returns the other.
-
-**When to Use**:
-- Minimum thresholds or constraints
-- Taking the lower priority value
-- Resource limits
-
-**Example**:
+**Example (min operation)**:
 
 ```json
 {
@@ -692,7 +556,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
   "properties": {
     "min_bitrate_kb": {
       "type": "integer",
-      "x-kfs-merge": {"strategy": "min"}
+      "x-kfs-merge": {"strategy": "numeric", "operation": "min"}
     }
   }
 }
@@ -732,14 +596,13 @@ Set `defaultStrategy` at the root level to establish baseline behavior:
 ```json
 {
   "x-kfs-merge": {
-    "defaultStrategy": "mergeRequest",
+    "defaultStrategy": "deepMerge",
     "arrayStrategy": "replace"
   }
 }
 ```
 
-- **`mergeRequest`**: Best default for most use cases (request overrides base)
-- **`deepMerge`**: Use when you have deeply nested objects
+- **`deepMerge`**: Best default for most use cases (request overrides base, recursive for objects)
 - **`keepBase`**: Use when base/template should be authoritative
 
 ### 2. Be Explicit with Arrays
@@ -750,15 +613,14 @@ Arrays have different semantics than objects. Always specify array strategy:
 {
   "tags": {
     "type": "array",
-    "x-kfs-merge": {"strategy": "concatUnique"}  // Explicit!
+    "x-kfs-merge": {"strategy": "concat", "unique": true}  // Explicit!
   }
 }
 ```
 
 Common array strategies:
 - **`replace`**: Complete replacement (default)
-- **`concat`**: Additive lists
-- **`concatUnique`**: Unique additive lists
+- **`concat`**: Additive lists (use `unique: true` for deduplication)
 - **`mergeByDiscriminator`**: Arrays of objects matched by a field
 
 ### 3. Use mergeByDiscriminator for Object Arrays
@@ -825,7 +687,7 @@ Combine strategies at different levels:
 ```json
 {
   "type": "object",
-  "x-kfs-merge": {"defaultStrategy": "mergeRequest"},
+  "x-kfs-merge": {"defaultStrategy": "deepMerge"},
   "properties": {
     "system_config": {
       "type": "object",
@@ -833,7 +695,7 @@ Combine strategies at different levels:
     },
     "user_config": {
       "type": "object",
-      "x-kfs-merge": {"strategy": "overlay"}   // PATCH-like updates
+      "x-kfs-merge": {"strategy": "deepMerge"}   // Recursive merge
     }
   }
 }
@@ -861,7 +723,7 @@ Combine strategies at different levels:
   "tags": {
     "type": "array",
     "items": {"type": "string"},
-    "x-kfs-merge": {"strategy": "concatUnique"}
+    "x-kfs-merge": {"strategy": "concat", "unique": true}
   }
 }
 ```
@@ -896,11 +758,11 @@ Combine strategies at different levels:
 **Problem**: Using numeric strategies on non-numeric fields.
 
 ```json
-// ❌ BAD: sum on strings will fail
+// ❌ BAD: numeric on strings will fail
 {
   "name": {
     "type": "string",
-    "x-kfs-merge": {"strategy": "sum"}
+    "x-kfs-merge": {"strategy": "numeric", "operation": "sum"}
   }
 }
 
@@ -908,11 +770,11 @@ Combine strategies at different levels:
 {
   "name": {
     "type": "string",
-    "x-kfs-merge": {"strategy": "mergeRight"}
+    "x-kfs-merge": {"strategy": "deepMerge"}
   },
   "count": {
     "type": "integer",
-    "x-kfs-merge": {"strategy": "sum"}
+    "x-kfs-merge": {"strategy": "numeric", "operation": "sum"}
   }
 }
 ```
@@ -937,26 +799,6 @@ Choose based on your API semantics:
 - **`asValue`**: Use when `null` means "clear this field"
 - **`asAbsent`**: Use when `null` means "I'm not specifying this field"
 
-### 6. Overusing overlay
-
-**Problem**: `overlay` is powerful but can be confusing. Use it only when you need PATCH semantics.
-
-```json
-// Use overlay when you want partial updates
-{
-  "config": {
-    "x-kfs-merge": {"strategy": "overlay"}
-  }
-}
-
-// Use deepMerge for standard nested object merging
-{
-  "config": {
-    "x-kfs-merge": {"strategy": "deepMerge"}
-  }
-}
-```
-
 ---
 
 ## Complete Real-World Example
@@ -968,14 +810,14 @@ Here's a comprehensive example using multiple strategies from the media encoding
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "x-kfs-merge": {
-    "defaultStrategy": "mergeRight",
+    "defaultStrategy": "deepMerge",
     "arrayStrategy": "replace",
     "nullHandling": "asAbsent"
   },
   "properties": {
     "job_timeout_seconds": {
       "type": "integer",
-      "x-kfs-merge": {"strategy": "max"}
+      "x-kfs-merge": {"strategy": "numeric", "operation": "max"}
     },
     "backend_settings": {
       "type": "object",
@@ -985,7 +827,7 @@ Here's a comprehensive example using multiple strategies from the media encoding
         },
         "options": {
           "type": "object",
-          "x-kfs-merge": {"strategy": "overlay"},
+          "x-kfs-merge": {"strategy": "deepMerge"},
           "properties": {
             "json_runner": {
               "type": "object",
@@ -993,7 +835,7 @@ Here's a comprehensive example using multiple strategies from the media encoding
                 "json_path": {"type": "string"},
                 "report_level": {
                   "type": "string",
-                  "x-kfs-merge": {"strategy": "keepLeft"}
+                  "x-kfs-merge": {"strategy": "keepBase"}
                 }
               }
             }
@@ -1019,7 +861,7 @@ Here's a comprehensive example using multiple strategies from the media encoding
     "tags": {
       "type": "array",
       "items": {"type": "string"},
-      "x-kfs-merge": {"strategy": "concatUnique"}
+      "x-kfs-merge": {"strategy": "concat", "unique": true}
     },
     "deinterlacing_options": {
       "type": "object",
@@ -1167,17 +1009,17 @@ Here's a comprehensive example using multiple strategies from the media encoding
 
 **Explanation**:
 
-1. **`job_timeout_seconds`** (max strategy): 7200 > 3600, so 7200 wins
-2. **`backend_settings.selected`** (mergeRight): A's "json_runner" wins
-3. **`backend_settings.options`** (overlay strategy):
+1. **`job_timeout_seconds`** (numeric with max): 7200 > 3600, so 7200 wins
+2. **`backend_settings.selected`** (deepMerge): A's "json_runner" wins
+3. **`backend_settings.options`** (deepMerge strategy):
    - A only specifies `json_runner`, so only that is updated
    - B's `local` is preserved
-   - Within `json_runner`: A's `json_path` wins, B's `report_level` wins (keepLeft), B's `worker_workdir_basedir_pattern` preserved
+   - Within `json_runner`: A's `json_path` wins, B's `report_level` wins (keepBase), B's `worker_workdir_basedir_pattern` preserved
 4. **`audio_output_config`** (mergeByDiscriminator on output_track):
    - Track 0: Merged (A's language, B's pattern)
    - Track 2: From A (new)
    - Track 1: From B (preserved)
-5. **`tags`** (concatUnique): ["default", "production", "urgent"] - "production" appears only once
+5. **`tags`** (concat with unique): ["default", "production", "urgent"] - "production" appears only once
 6. **`deinterlacing_options`** (deepMerge):
    - `algo.yadif.mode`: A's 1 wins
    - `algo.yadif.parity`: B's -1 preserved
@@ -1187,23 +1029,16 @@ Here's a comprehensive example using multiple strategies from the media encoding
 
 ## Summary
 
-The kfs-flow-merge library provides 12 powerful merge strategies to handle any JSON merging scenario:
+The kfs-flow-merge library provides 7 powerful merge strategies to handle any JSON merging scenario:
 
-| Strategy | Use Case | Key Behavior |
-|----------|----------|--------------|
-| `mergeRequest` | Default, request overrides | Request (A) wins if present |
-| `keepBase` | Immutable base/template | Base (B) always wins |
-| `keepRequest` | Required user input | Request (A) always wins |
-| `deepMerge` | Nested objects | Recursive field merge |
-| `replace` | Arrays (default) | Complete replacement |
-| `concat` | Additive arrays | B + A |
-| `concatUnique` | Unique tags | B + A, deduplicated |
-| `mergeByDiscriminator` | Object arrays | Match by discriminator field |
-| `overlay` | PATCH updates | Partial application |
-| `sum` | Counters | A + B |
-| `max` | Limits | max(A, B) |
-| `min` | Thresholds | min(A, B) |
+| Strategy | Use Case | Key Behavior | Options |
+|----------|----------|--------------|---------|
+| `deepMerge` | Default, request overrides | Recursive merge, A wins on conflict | - |
+| `keepBase` | Immutable base/template | Base (B) always wins | - |
+| `keepRequest` | Required user input | Request (A) always wins | - |
+| `replace` | Arrays (default) | Complete replacement | - |
+| `concat` | Additive arrays | B + A | `unique: true` for deduplication |
+| `mergeByDiscriminator` | Object arrays | Match by discriminator field | `discriminatorField`, `replaceOnMatch` |
+| `numeric` | Counters, limits, thresholds | sum, max, or min of values | `operation: "sum"\|"max"\|"min"` |
 
 Choose strategies based on your data semantics, and layer them appropriately for complex schemas. Always be explicit with array strategies and understand null handling for predictable results.
-
-

@@ -15,6 +15,44 @@ type: "always_apply"
 - **Same Package:** Place tests in the same package to test unexported functions. Use `_test` suffix package (e.g., `package foo_test`) for black-box testing of exported API only.
 - **Testdata Directory:** Use a `testdata/` directory for test fixtures. Go tooling ignores this directory.
 
+## Test File Size and Splitting
+
+- **Maximum File Size:** Keep test files to a reasonable size, ideally **400-500 lines maximum**. Files exceeding this threshold should be split into smaller, focused files.
+- **When to Split:** Split test files when they:
+  - Exceed 500 lines
+  - Cover multiple distinct strategies, features, or behaviors
+  - Become difficult to navigate or maintain
+  - Mix different categories of tests (e.g., unit tests with error cases)
+
+- **How to Split:** Use the `{source_file}_{differentiator}_test.go` naming pattern where `{differentiator}` describes the specific aspect or category:
+  - **By strategy type:** `strategies_numeric_test.go`, `strategies_replace_test.go`, `strategies_deepmerge_test.go`
+  - **By feature area:** `api_auth_test.go`, `api_validation_test.go`
+  - **By test category:** `handler_error_test.go`, `handler_edge_test.go`
+  - **By null/edge handling:** `strategies_null_test.go`, `strategies_error_test.go`
+
+- **Single Purpose:** Each split file should have a **clear, focused purpose** aligned with:
+  - A specific merge strategy (e.g., keepRequest, keepBase, numeric, concat)
+  - A specific feature area (e.g., authentication, validation, serialization)
+  - A specific test category (e.g., error conditions, edge cases, null handling)
+
+- **Benefits of Splitting:**
+  - Easier navigation and discoverability
+  - Faster test runs when targeting specific areas (`go test -run TestNumeric`)
+  - Clearer ownership and maintainability
+  - Reduced merge conflicts in team environments
+
+- **Example Split Structure:**
+  ```
+  strategies_array_test.go      # Array strategies: concat, mergeByDiscriminator
+  strategies_numeric_test.go    # Numeric strategy: sum, max, min operations
+  strategies_keepbase_test.go   # keepBase strategy tests
+  strategies_keeprequest_test.go # keepRequest strategy tests
+  strategies_deepmerge_test.go  # deepMerge strategy tests
+  strategies_replace_test.go    # replace strategy tests
+  strategies_null_test.go       # Null handling across all strategies
+  strategies_error_test.go      # Error conditions and invalid inputs
+  ```
+
 ## Table-Driven Tests
 
 - **Prefer Table-Driven Tests:** Use table-driven tests for testing multiple inputs and expected outputs.

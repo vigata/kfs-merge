@@ -2,8 +2,8 @@ package kfsmerge
 
 import "fmt"
 
-// concatArrays concatenates two arrays.
-func (m *Merger) concatArrays(a, b any) (any, error) {
+// concatArrays concatenates two arrays. If unique is true, removes duplicate primitive values.
+func (m *Merger) concatArrays(a, b any, unique bool) (any, error) {
 	aArr, aIsArr := a.([]any)
 	bArr, bIsArr := b.([]any)
 
@@ -12,30 +12,30 @@ func (m *Merger) concatArrays(a, b any) (any, error) {
 	}
 
 	if !bIsArr {
+		if unique {
+			return m.deduplicateArray(aArr), nil
+		}
 		return aArr, nil
 	}
 	if !aIsArr {
+		if unique {
+			return m.deduplicateArray(bArr), nil
+		}
 		return bArr, nil
 	}
 
 	result := make([]any, 0, len(bArr)+len(aArr))
 	result = append(result, bArr...)
 	result = append(result, aArr...)
+
+	if unique {
+		return m.deduplicateArray(result), nil
+	}
 	return result, nil
 }
 
-// concatUniqueArrays concatenates two arrays and removes duplicates.
-func (m *Merger) concatUniqueArrays(a, b any) (any, error) {
-	concat, err := m.concatArrays(a, b)
-	if err != nil {
-		return nil, err
-	}
-
-	arr, ok := concat.([]any)
-	if !ok {
-		return concat, nil
-	}
-
+// deduplicateArray removes duplicate primitive values from an array.
+func (m *Merger) deduplicateArray(arr []any) []any {
 	seen := make(map[any]bool)
 	result := make([]any, 0, len(arr))
 	for _, item := range arr {
@@ -45,19 +45,20 @@ func (m *Merger) concatUniqueArrays(a, b any) (any, error) {
 				result = append(result, item)
 			}
 		} else {
+			// Non-primitive values are always included
 			result = append(result, item)
 		}
 	}
-	return result, nil
+	return result
 }
 
-// sumNumbers adds two numeric values.
-func (m *Merger) sumNumbers(a, b any) (any, error) {
+// numericOperation performs numeric operations (sum, max, min) on two values.
+func (m *Merger) numericOperation(a, b any, operation string) (any, error) {
 	aNum, aOk := toFloat64(a)
 	bNum, bOk := toFloat64(b)
 
 	if !aOk && !bOk {
-		return nil, fmt.Errorf("sum strategy requires numbers")
+		return nil, fmt.Errorf("numeric strategy requires numbers")
 	}
 	if !aOk {
 		return b, nil
@@ -66,49 +67,22 @@ func (m *Merger) sumNumbers(a, b any) (any, error) {
 		return a, nil
 	}
 
-	return aNum + bNum, nil
-}
-
-// maxNumber returns the larger of two numeric values.
-func (m *Merger) maxNumber(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-
-	if !aOk && !bOk {
-		return nil, fmt.Errorf("max strategy requires numbers")
-	}
-	if !aOk {
+	switch operation {
+	case "sum":
+		return aNum + bNum, nil
+	case "max":
+		if aNum > bNum {
+			return a, nil
+		}
 		return b, nil
-	}
-	if !bOk {
-		return a, nil
-	}
-
-	if aNum > bNum {
-		return a, nil
-	}
-	return b, nil
-}
-
-// minNumber returns the smaller of two numeric values.
-func (m *Merger) minNumber(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-
-	if !aOk && !bOk {
-		return nil, fmt.Errorf("min strategy requires numbers")
-	}
-	if !aOk {
+	case "min":
+		if aNum < bNum {
+			return a, nil
+		}
 		return b, nil
+	default:
+		return nil, fmt.Errorf("unknown numeric operation: %s", operation)
 	}
-	if !bOk {
-		return a, nil
-	}
-
-	if aNum < bNum {
-		return a, nil
-	}
-	return b, nil
 }
 
 // toFloat64 converts a value to float64 if it's a number.
@@ -209,57 +183,6 @@ func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, repla
 	for i, bItem := range bArr {
 		if !bMerged[i] {
 			result = append(result, bItem)
-		}
-	}
-
-	return result, nil
-}
-
-// overlay merges A into B, but only applies fields that A explicitly provides.
-func (m *Merger) overlay(a, b any, path string) (any, error) {
-	aMap, aIsMap := a.(map[string]any)
-	bMap, bIsMap := b.(map[string]any)
-
-	if a == nil {
-		return b, nil
-	}
-	if b == nil {
-		return a, nil
-	}
-
-	if !aIsMap || !bIsMap {
-		return a, nil
-	}
-
-	result := make(map[string]any)
-	for k, v := range bMap {
-		result[k] = v
-	}
-
-	for k, aVal := range aMap {
-		fieldPath := path + "/" + k
-		bVal, bHasKey := bMap[k]
-
-		nullHandling := m.schema.NullHandlingFor(fieldPath)
-		if aVal == nil && nullHandling == "asAbsent" {
-			continue
-		}
-
-		if !bHasKey {
-			result[k] = aVal
-		} else {
-			aValMap, aIsMap := aVal.(map[string]any)
-			bValMap, bIsMap := bVal.(map[string]any)
-
-			if aIsMap && bIsMap {
-				merged, err := m.overlay(aValMap, bValMap, fieldPath)
-				if err != nil {
-					return nil, err
-				}
-				result[k] = merged
-			} else {
-				result[k] = aVal
-			}
 		}
 	}
 

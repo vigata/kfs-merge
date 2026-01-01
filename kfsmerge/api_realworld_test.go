@@ -203,9 +203,9 @@ func TestForcedKeyframesOptionReplace(t *testing.T) {
 	}
 }
 
-// TestForcedKeyframesOptionWithoutReplace shows default mergeRequest behavior (contrast with replace).
+// TestForcedKeyframesOptionWithoutReplace shows default deepMerge behavior (contrast with replace).
 func TestForcedKeyframesOptionWithoutReplace(t *testing.T) {
-	// Without replace strategy, mergeRequest would deep merge, potentially leaving mixed state.
+	// Without replace strategy, deepMerge would deep merge, potentially leaving mixed state.
 	schemaJSON := []byte(`{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -251,7 +251,7 @@ func TestForcedKeyframesOptionWithoutReplace(t *testing.T) {
 
 	fk := got["forced_keyframes"].(map[string]any)
 
-	// With default mergeRequest, both fields would be present (B's timecodes + A's frame_numbers)
+	// With default deepMerge, both fields would be present (B's timecodes + A's frame_numbers)
 	// This is the "mixed state" that replace strategy avoids
 
 	// keyframes_timecodes should be preserved from base: ["00:00:10:00"]

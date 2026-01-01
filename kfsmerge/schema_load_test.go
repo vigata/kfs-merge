@@ -29,7 +29,7 @@ func TestLoadSchemaWithMergeExtensions(t *testing.T) {
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
 		"x-kfs-merge": {
-			"defaultStrategy": "mergeRequest",
+			"defaultStrategy": "deepMerge",
 			"arrayStrategy": "concat"
 		},
 		"properties": {
@@ -126,4 +126,3 @@ func TestLoadSchemaFromSource(t *testing.T) {
 		})
 	}
 }
-

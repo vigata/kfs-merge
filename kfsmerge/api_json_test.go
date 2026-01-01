@@ -101,7 +101,7 @@ func TestMergeJSONOutput(t *testing.T) {
 			expected: `{"tags": ["default", "production", "new", "urgent"]}`,
 		},
 		{
-			name: "concatUnique removes duplicates",
+			name: "concat with unique option removes duplicates",
 			schema: `{
 				"$schema": "https://json-schema.org/draft/2020-12/schema",
 				"type": "object",
@@ -109,7 +109,7 @@ func TestMergeJSONOutput(t *testing.T) {
 					"tags": {
 						"type": "array",
 						"items": {"type": "string"},
-						"x-kfs-merge": {"strategy": "concatUnique"}
+						"x-kfs-merge": {"strategy": "concat", "unique": true}
 					}
 				}
 			}`,
@@ -125,7 +125,7 @@ func TestMergeJSONOutput(t *testing.T) {
 				"properties": {
 					"count": {
 						"type": "integer",
-						"x-kfs-merge": {"strategy": "sum"}
+						"x-kfs-merge": {"strategy": "numeric", "operation": "sum"}
 					}
 				}
 			}`,
@@ -141,7 +141,7 @@ func TestMergeJSONOutput(t *testing.T) {
 				"properties": {
 					"limit": {
 						"type": "integer",
-						"x-kfs-merge": {"strategy": "max"}
+						"x-kfs-merge": {"strategy": "numeric", "operation": "max"}
 					}
 				}
 			}`,

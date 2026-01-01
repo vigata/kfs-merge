@@ -28,8 +28,6 @@ func (m *Merger) mergeValues(a, b any, path string) (any, error) {
 		return b, nil
 	case StrategyKeepRequest:
 		return a, nil
-	case StrategyMergeRequest:
-		return m.mergeRequest(a, b, path)
 	case StrategyDeepMerge:
 		return m.deepMerge(a, b, path)
 	case StrategyReplace:
@@ -38,21 +36,13 @@ func (m *Merger) mergeValues(a, b any, path string) (any, error) {
 		}
 		return b, nil
 	case StrategyConcat:
-		return m.concatArrays(a, b)
-	case StrategyConcatUnique:
-		return m.concatUniqueArrays(a, b)
+		return m.concatArrays(a, b, config.UniqueOrDefault())
 	case StrategyMergeByDiscriminator:
 		return m.mergeByDiscriminator(a, b, config.DiscriminatorField, config.ReplaceOnMatchOrDefault(), path)
-	case StrategyOverlay:
-		return m.overlay(a, b, path)
-	case StrategySum:
-		return m.sumNumbers(a, b)
-	case StrategyMax:
-		return m.maxNumber(a, b)
-	case StrategyMin:
-		return m.minNumber(a, b)
+	case StrategyNumeric:
+		return m.numericOperation(a, b, config.OperationOrDefault())
 	default:
-		return m.mergeRequest(a, b, path)
+		return m.deepMerge(a, b, path)
 	}
 }
 
@@ -70,57 +60,50 @@ func (m *Merger) getFieldConfig(a any, path string) FieldMergeConfig {
 	return FieldMergeConfig{Strategy: globalConfig.DefaultStrategy}
 }
 
-// mergeRequest implements the default merge strategy: request (A) wins if present, else base (B).
-func (m *Merger) mergeRequest(a, b any, path string) (any, error) {
-	aMap, aIsMap := a.(map[string]any)
-	bMap, bIsMap := b.(map[string]any)
-	if aIsMap && bIsMap {
-		return m.deepMerge(aMap, bMap, path)
-	}
-
-	if a == nil {
-		nullHandling := m.schema.NullHandlingFor(path)
-		if nullHandling == NullAsAbsent {
-			return b, nil
-		}
-	}
-
-	return a, nil
-}
-
-// deepMerge recursively merges two objects.
+// deepMerge recursively merges two values. For objects, it merges field-by-field.
+// For scalars, A wins if present. Respects nullHandling configuration.
 func (m *Merger) deepMerge(a, b any, path string) (any, error) {
 	aMap, aIsMap := a.(map[string]any)
 	bMap, bIsMap := b.(map[string]any)
 
-	if !aIsMap || !bIsMap {
-		if a != nil {
-			return a, nil
+	// If both are objects, merge field-by-field
+	if aIsMap && bIsMap {
+		result := make(map[string]any)
+		for k, v := range bMap {
+			result[k] = v
 		}
-		return b, nil
-	}
 
-	result := make(map[string]any)
-	for k, v := range bMap {
-		result[k] = v
-	}
+		for k, aVal := range aMap {
+			fieldPath := path + "/" + k
+			bVal, bHasKey := bMap[k]
 
-	for k, aVal := range aMap {
-		fieldPath := path + "/" + k
-		bVal, bHasKey := bMap[k]
-
-		if !bHasKey {
-			result[k] = aVal
-		} else {
-			merged, err := m.mergeValues(aVal, bVal, fieldPath)
-			if err != nil {
-				return nil, err
+			if !bHasKey {
+				result[k] = aVal
+			} else {
+				merged, err := m.mergeValues(aVal, bVal, fieldPath)
+				if err != nil {
+					return nil, err
+				}
+				result[k] = merged
 			}
-			result[k] = merged
 		}
+
+		return result, nil
 	}
 
-	return result, nil
+	// For non-objects (scalars, arrays, mixed types): A wins if present
+	// Respect nullHandling for null values
+	if a == nil {
+		nullHandling := m.schema.NullHandlingFor(path)
+		if nullHandling == NullAsAbsent {
+			// Treat null as absent - B wins
+			return b, nil
+		}
+		// NullAsValue or NullPreserve: null is a value, A (null) wins
+		return nil, nil
+	}
+
+	return a, nil
 }
 
 // handleNulls adjusts A and B values based on null handling configuration.

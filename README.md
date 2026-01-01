@@ -53,7 +53,7 @@ func main() {
     schemaJSON := []byte(`{
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
-        "x-kfs-merge": {"defaultStrategy": "mergeRequest"},
+        "x-kfs-merge": {"defaultStrategy": "deepMerge"},
         "properties": {
             "name": {"type": "string", "x-kfs-merge": {"strategy": "keepBase"}},
             "count": {"type": "integer"}
@@ -69,7 +69,7 @@ func main() {
     fmt.Println(string(result))
     // Output: {"count":100,"name":"template"}
     // - "name" uses keepBase, so B (base/template) wins
-    // - "count" uses mergeRequest, so A (request) wins
+    // - "count" uses deepMerge (default), so A (request) wins
 }
 ```
 
@@ -77,19 +77,15 @@ func main() {
 
 Configure merge behavior per-field using `x-kfs-merge`:
 
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| `mergeRequest` | Request (A) wins if present, else base (B) (default) | Most fields |
-| `keepBase` | Always use base's (B) value | Immutable template defaults |
-| `keepRequest` | Always use request's (A) value | Required user input |
-| `deepMerge` | Recursively merge objects | Nested configs |
-| `replace` | Replace B's array with A's (default for arrays) | Complete replacement |
-| `concat` | Append A's items to B's | Additive arrays |
-| `concatUnique` | Concat and remove duplicates | Tag arrays |
-| `mergeByDiscriminator` | Merge array items by a discriminator field | Arrays of objects |
-| `sum` | Add numeric values | Counters |
-| `max` | Take larger value | Limits |
-| `min` | Take smaller value | Thresholds |
+| Strategy | Description | Options | Best For |
+|----------|-------------|---------|----------|
+| `deepMerge` | Recursively merge objects, A wins on conflict (default) | - | Most fields, nested configs |
+| `keepBase` | Always use base's (B) value | - | Immutable template defaults |
+| `keepRequest` | Always use request's (A) value | - | Required user input |
+| `replace` | Replace B's array with A's (default for arrays) | - | Complete replacement |
+| `concat` | Append A's items to B's | `unique: true` | Additive arrays, tag arrays |
+| `mergeByDiscriminator` | Merge array items by a discriminator field | `discriminatorField`, `replaceOnMatch` | Arrays of objects |
+| `numeric` | Numeric operations on values | `operation: "sum"\|"max"\|"min"` | Counters, limits, thresholds |
 
 **Note**: In `Merge(a, b)`, parameter `a` is the request/override (typically API request or user input), and parameter `b` is the base/template (typically defaults or template configuration).
 
@@ -118,7 +114,7 @@ Set defaults at the schema level:
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-kfs-merge": {
-    "defaultStrategy": "mergeRight",
+    "defaultStrategy": "deepMerge",
     "arrayStrategy": "replace",
     "nullHandling": "asValue"
   }
@@ -218,7 +214,7 @@ go build -o kfsmerge ./cmd/kfsmerge
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "x-kfs-merge": {"defaultStrategy": "mergeRequest"},
+  "x-kfs-merge": {"defaultStrategy": "deepMerge"},
   "properties": {
     "name": {"type": "string", "x-kfs-merge": {"strategy": "keepBase"}},
     "version": {"type": "string"},
@@ -282,8 +278,8 @@ go build -o kfsmerge ./cmd/kfsmerge
 }
 ```
 
-- **name**: Template wins (`keepLeft`)
-- **version**: Request wins (`mergeRight`)
+- **name**: Template wins (`keepBase`)
+- **version**: Request wins (`deepMerge` default)
 - **config**: Deep merged (timeout from request, retries from template)
 - **tags**: Concatenated (`concat`)
 - **dependencies**: Merged by name, logger updated, auth added (`mergeByDiscriminator`)

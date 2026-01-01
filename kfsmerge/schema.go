@@ -83,6 +83,30 @@ func LoadSchema(schemaJSON []byte) (*Schema, error) {
 	return s, nil
 }
 
+// parseFieldMergeConfig extracts a FieldMergeConfig from a merge extension map.
+func parseFieldMergeConfig(mergeMap map[string]any) FieldMergeConfig {
+	config := FieldMergeConfig{}
+	if strategy, ok := mergeMap["strategy"].(string); ok {
+		config.Strategy = MergeStrategy(strategy)
+	}
+	if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
+		config.DiscriminatorField = discriminatorField
+	}
+	if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
+		config.ReplaceOnMatch = &replaceOnMatch
+	}
+	if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
+		config.NullHandling = NullHandling(nullHandling)
+	}
+	if unique, ok := mergeMap["unique"].(bool); ok {
+		config.Unique = &unique
+	}
+	if operation, ok := mergeMap["operation"].(string); ok {
+		config.Operation = operation
+	}
+	return config
+}
+
 // parseGlobalConfig extracts the schema-level x-kfs-merge configuration.
 func (s *Schema) parseGlobalConfig() error {
 	mergeRaw, ok := s.raw[MergeExtensionKey]
@@ -130,19 +154,7 @@ func (s *Schema) parseDefsConfigs() error {
 				return fmt.Errorf("%s in $defs/%s must be an object", MergeExtensionKey, defName)
 			}
 
-			config := FieldMergeConfig{}
-			if strategy, ok := mergeMap["strategy"].(string); ok {
-				config.Strategy = MergeStrategy(strategy)
-			}
-			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
-				config.DiscriminatorField = discriminatorField
-			}
-			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = &replaceOnMatch
-			}
-			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
-				config.NullHandling = NullHandling(nullHandling)
-			}
+			config := parseFieldMergeConfig(mergeMap)
 			s.defConfigs[defName] = config
 		}
 
@@ -163,19 +175,7 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 				return fmt.Errorf("%s in $defs/%s%s must be an object", MergeExtensionKey, defName, path)
 			}
 
-			config := FieldMergeConfig{}
-			if strategy, ok := mergeMap["strategy"].(string); ok {
-				config.Strategy = MergeStrategy(strategy)
-			}
-			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
-				config.DiscriminatorField = discriminatorField
-			}
-			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = &replaceOnMatch
-			}
-			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
-				config.NullHandling = NullHandling(nullHandling)
-			}
+			config := parseFieldMergeConfig(mergeMap)
 			s.defConfigs[defName+":"+path] = config
 		}
 	}
@@ -230,19 +230,7 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 				return fmt.Errorf("%s at %s must be an object", MergeExtensionKey, path)
 			}
 
-			config := FieldMergeConfig{}
-			if strategy, ok := mergeMap["strategy"].(string); ok {
-				config.Strategy = MergeStrategy(strategy)
-			}
-			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
-				config.DiscriminatorField = discriminatorField
-			}
-			if replaceOnMatch, ok := mergeMap["replaceOnMatch"].(bool); ok {
-				config.ReplaceOnMatch = &replaceOnMatch
-			}
-			if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
-				config.NullHandling = NullHandling(nullHandling)
-			}
+			config := parseFieldMergeConfig(mergeMap)
 			s.fieldConfigs[path] = config
 		}
 	}
