@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `keepLeft` | `keepBase` | Always use base (B) value |
 | `keepRight` | `keepRequest` | Always use request (A) value |
 
-All other strategies (`deepMerge`, `replace`, `concat`, `concatUnique`, `mergeByKey`, `mergeByDiscriminator`, `overlay`, `sum`, `max`, `min`) remain unchanged.
+All other strategies (`deepMerge`, `replace`, `concat`, `concatUnique`, `mergeByDiscriminator`, `overlay`, `sum`, `max`, `min`) remain unchanged.
 
 #### Migration Guide
 
@@ -82,7 +82,7 @@ This makes the code more readable and eliminates confusion about which parameter
 
 - Initial release of kfs-flow-merge library
 - JSON Schema Draft 2020-12 validation support
-- 13 merge strategies: mergeRight, keepLeft, keepRight, deepMerge, replace, concat, concatUnique, mergeByKey, mergeByDiscriminator, overlay, sum, max, min
+- 12 merge strategies: mergeRight, keepLeft, keepRight, deepMerge, replace, concat, concatUnique, mergeByDiscriminator, overlay, sum, max, min
 - Configurable null handling (asValue, asAbsent, preserve)
 - CLI tool for merging JSON instances
 - Comprehensive documentation and examples

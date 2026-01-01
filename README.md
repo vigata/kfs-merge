@@ -86,7 +86,7 @@ Configure merge behavior per-field using `x-kfs-merge`:
 | `replace` | Replace B's array with A's (default for arrays) | Complete replacement |
 | `concat` | Append A's items to B's | Additive arrays |
 | `concatUnique` | Concat and remove duplicates | Tag arrays |
-| `mergeByKey` | Merge array items by a key field | Arrays of objects |
+| `mergeByDiscriminator` | Merge array items by a discriminator field | Arrays of objects |
 | `sum` | Add numeric values | Counters |
 | `max` | Take larger value | Limits |
 | `min` | Take smaller value | Thresholds |
@@ -104,7 +104,7 @@ Configure merge behavior per-field using `x-kfs-merge`:
     },
     "dependencies": {
       "type": "array",
-      "x-kfs-merge": {"strategy": "mergeByKey", "mergeKey": "name"}
+      "x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "name"}
     }
   }
 }
@@ -237,7 +237,7 @@ go build -o kfsmerge ./cmd/kfsmerge
     "dependencies": {
       "type": "array",
       "items": {"type": "object", "properties": {"name": {"type": "string"}, "version": {"type": "string"}}},
-      "x-kfs-merge": {"strategy": "mergeByKey", "mergeKey": "name"}
+      "x-kfs-merge": {"strategy": "mergeByDiscriminator", "discriminatorField": "name"}
     }
   }
 }
@@ -286,7 +286,7 @@ go build -o kfsmerge ./cmd/kfsmerge
 - **version**: Request wins (`mergeRight`)
 - **config**: Deep merged (timeout from request, retries from template)
 - **tags**: Concatenated (`concat`)
-- **dependencies**: Merged by name, logger updated, auth added (`mergeByKey`)
+- **dependencies**: Merged by name, logger updated, auth added (`mergeByDiscriminator`)
 
 ## License
 

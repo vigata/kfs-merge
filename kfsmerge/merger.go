@@ -41,8 +41,6 @@ func (m *Merger) mergeValues(a, b any, path string) (any, error) {
 		return m.concatArrays(a, b)
 	case StrategyConcatUnique:
 		return m.concatUniqueArrays(a, b)
-	case StrategyMergeByKey:
-		return m.mergeByKey(a, b, config.MergeKey, config.ReplaceOnMatchOrDefault(), path)
 	case StrategyMergeByDiscriminator:
 		return m.mergeByDiscriminator(a, b, config.DiscriminatorField, config.ReplaceOnMatchOrDefault(), path)
 	case StrategyOverlay:
@@ -145,4 +143,3 @@ func (m *Merger) handleNulls(a, b any, path string) (any, any) {
 
 	return a, b
 }
-

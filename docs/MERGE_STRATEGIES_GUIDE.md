@@ -11,12 +11,11 @@
   - [5. replace](#5-replace)
   - [6. concat](#6-concat)
   - [7. concatUnique](#7-concatunique)
-  - [8. mergeByKey](#8-mergebykey)
-  - [9. mergeByDiscriminator](#9-mergebydiscriminator)
-  - [10. overlay](#10-overlay)
-  - [11. sum](#11-sum)
-  - [12. max](#12-max)
-  - [13. min](#13-min)
+  - [8. mergeByDiscriminator](#8-mergebydiscriminator)
+  - [9. overlay](#9-overlay)
+  - [10. sum](#10-sum)
+  - [11. max](#11-max)
+  - [12. min](#12-min)
 - [Best Practices](#best-practices)
 - [Common Pitfalls to Avoid](#common-pitfalls-to-avoid)
 - [Complete Real-World Example](#complete-real-world-example)
@@ -26,7 +25,7 @@
 
 ## Introduction
 
-The kfs-flow-merge library provides 13 distinct merge strategies to control how JSON instances are combined. Each strategy is configured using the `x-kfs-merge` extension in your JSON Schema, allowing fine-grained control over merge behavior at every level of your data structure.
+The kfs-flow-merge library provides 12 distinct merge strategies to control how JSON instances are combined. Each strategy is configured using the `x-kfs-merge` extension in your JSON Schema, allowing fine-grained control over merge behavior at every level of your data structure.
 
 ### Core Concept
 
@@ -43,9 +42,8 @@ By default, A takes precedence over B (request overrides base), but each strateg
 {
   "x-kfs-merge": {
     "strategy": "strategyName",
-    "mergeKey": "keyField",           // For mergeByKey strategy
     "discriminatorField": "type",     // For mergeByDiscriminator strategy
-    "replaceOnMatch": true,           // Default for mergeByKey/mergeByDiscriminator (set false to deep merge matches)
+    "replaceOnMatch": true,           // Default for mergeByDiscriminator (set false to deep merge matches)
     "defaultStrategy": "mergeRequest", // Default for all fields
     "arrayStrategy": "replace",       // Default for arrays
     "nullHandling": "asAbsent"        // How to treat null values
@@ -423,92 +421,7 @@ By default, A takes precedence over B (request overrides base), but each strateg
 
 ---
 
-### 8. mergeByKey
-
-**Description**: Merges arrays of objects by matching them on a specified key field. By default, matching items are **replaced** (A’s item fully replaces B’s). Objects unique to A or B are included in the result. Set `replaceOnMatch: false` if you want deep-merge semantics instead.
-
-**When to Use**:
-- Arrays of configuration objects with unique identifiers
-- Dependency lists with name/id fields
-- Any array where items have a natural key
-
-**Example**:
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "audio_output_config": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "output_track": {"type": "integer"},
-          "language": {"type": "string"},
-          "output_file_pattern": {"type": "string"}
-        }
-      },
-      "x-kfs-merge": {
-        "strategy": "mergeByKey",
-        "mergeKey": "output_track"
-      }
-    }
-  }
-}
-```
-
-**Input A** (API Request):
-```json
-{
-  "audio_output_config": [
-    {"output_track": 0, "language": "Spa"},
-    {"output_track": 2, "language": "Fra"}
-  ]
-}
-```
-
-**Input B** (Template):
-```json
-{
-  "audio_output_config": [
-    {"output_track": 0, "language": "Eng", "output_file_pattern": "[source_basename]_[output_track].[default_extension]"},
-    {"output_track": 1, "language": "Eng", "output_file_pattern": "[source_basename]_[output_track].[default_extension]"}
-  ]
-}
-```
-
-**Result**:
-```json
-{
-  "audio_output_config": [
-    {
-      "output_track": 0,
-      "language": "Spa"
-    },
-    {
-      "output_track": 2,
-      "language": "Fra"
-    },
-    {
-      "output_track": 1,
-      "language": "Eng",
-      "output_file_pattern": "[source_basename]_[output_track].[default_extension]"
-    }
-  ]
-}
-```
-
-**Explanation (replaceOnMatch default = true)**:
-- Track 0: A's item replaces B's entirely, so B's `output_file_pattern` is dropped.
-- Track 2: From A only (new track).
-- Track 1: From B only (preserved).
-
-To deep merge matching items instead of replacing, set `replaceOnMatch: false` (no example shown).
-
----
-
-### 9. mergeByDiscriminator
+### 8. mergeByDiscriminator
 
 **Description**: Merges arrays of discriminated union objects (oneOf/anyOf) by matching on a discriminator field (typically "type"). By default, matching items are **replaced** (A’s item fully replaces B’s). Set `replaceOnMatch: false` to deep merge matching items instead.
 
@@ -595,7 +508,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 ---
 
-### 10. overlay
+### 9. overlay
 
 **Description**: Applies A as a partial update (PATCH-like). Only fields explicitly present in A are applied to B. Fields not in A remain unchanged from B. Respects `nullHandling: "asAbsent"`.
 
@@ -663,7 +576,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 ---
 
-### 11. sum
+### 10. sum
 
 **Description**: Adds two numeric values together. If one value is missing, returns the other. Requires both values to be numbers.
 
@@ -712,7 +625,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 ---
 
-### 12. max
+### 11. max
 
 **Description**: Returns the larger of two numeric values. If one value is missing, returns the other.
 
@@ -761,7 +674,7 @@ To deep merge matching items instead of replacing, set `replaceOnMatch: false` (
 
 ---
 
-### 13. min
+### 12. min
 
 **Description**: Returns the smaller of two numeric values. If one value is missing, returns the other.
 
@@ -846,11 +759,11 @@ Common array strategies:
 - **`replace`**: Complete replacement (default)
 - **`concat`**: Additive lists
 - **`concatUnique`**: Unique additive lists
-- **`mergeByKey`**: Arrays of objects with IDs
+- **`mergeByDiscriminator`**: Arrays of objects matched by a field
 
-### 3. Use mergeByKey for Object Arrays
+### 3. Use mergeByDiscriminator for Object Arrays
 
-When arrays contain objects with natural keys:
+When arrays contain objects with a natural key or discriminator field:
 
 ```json
 {
@@ -864,8 +777,8 @@ When arrays contain objects with natural keys:
       }
     },
     "x-kfs-merge": {
-      "strategy": "mergeByKey",
-      "mergeKey": "name"
+      "strategy": "mergeByDiscriminator",
+      "discriminatorField": "name"
     }
   }
 }
@@ -953,32 +866,7 @@ Combine strategies at different levels:
 }
 ```
 
-### 2. Using mergeByKey Without a Key
-
-**Problem**: `mergeByKey` requires `mergeKey` to be specified.
-
-```json
-// ❌ BAD: Missing mergeKey
-{
-  "items": {
-    "type": "array",
-    "x-kfs-merge": {"strategy": "mergeByKey"}
-  }
-}
-
-// ✅ GOOD: Specify the key field
-{
-  "items": {
-    "type": "array",
-    "x-kfs-merge": {
-      "strategy": "mergeByKey",
-      "mergeKey": "id"
-    }
-  }
-}
-```
-
-### 3. Understanding keepBase and keepRequest
+### 2. Understanding keepBase and keepRequest
 
 **Semantic Strategy Names**: The strategies use clear semantic names to indicate their behavior.
 
@@ -1124,8 +1012,8 @@ Here's a comprehensive example using multiple strategies from the media encoding
         }
       },
       "x-kfs-merge": {
-        "strategy": "mergeByKey",
-        "mergeKey": "output_track"
+        "strategy": "mergeByDiscriminator",
+        "discriminatorField": "output_track"
       }
     },
     "tags": {
@@ -1285,7 +1173,7 @@ Here's a comprehensive example using multiple strategies from the media encoding
    - A only specifies `json_runner`, so only that is updated
    - B's `local` is preserved
    - Within `json_runner`: A's `json_path` wins, B's `report_level` wins (keepLeft), B's `worker_workdir_basedir_pattern` preserved
-4. **`audio_output_config`** (mergeByKey on output_track):
+4. **`audio_output_config`** (mergeByDiscriminator on output_track):
    - Track 0: Merged (A's language, B's pattern)
    - Track 2: From A (new)
    - Track 1: From B (preserved)
@@ -1299,7 +1187,7 @@ Here's a comprehensive example using multiple strategies from the media encoding
 
 ## Summary
 
-The kfs-flow-merge library provides 13 powerful merge strategies to handle any JSON merging scenario:
+The kfs-flow-merge library provides 12 powerful merge strategies to handle any JSON merging scenario:
 
 | Strategy | Use Case | Key Behavior |
 |----------|----------|--------------|
@@ -1310,8 +1198,7 @@ The kfs-flow-merge library provides 13 powerful merge strategies to handle any J
 | `replace` | Arrays (default) | Complete replacement |
 | `concat` | Additive arrays | B + A |
 | `concatUnique` | Unique tags | B + A, deduplicated |
-| `mergeByKey` | Object arrays | Match by key field |
-| `mergeByDiscriminator` | Polymorphic arrays | Match by type field |
+| `mergeByDiscriminator` | Object arrays | Match by discriminator field |
 | `overlay` | PATCH updates | Partial application |
 | `sum` | Counters | A + B |
 | `max` | Limits | max(A, B) |

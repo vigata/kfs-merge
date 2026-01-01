@@ -139,77 +139,7 @@ func isPrimitive(v any) bool {
 	}
 }
 
-// mergeByKey merges two arrays of objects by a key field.
-func (m *Merger) mergeByKey(a, b any, keyField string, replaceOnMatch bool, path string) (any, error) {
-	aArr, aIsArr := a.([]any)
-	bArr, bIsArr := b.([]any)
-
-	if !aIsArr && !bIsArr {
-		return nil, fmt.Errorf("mergeByKey strategy requires arrays")
-	}
-
-	if !bIsArr || len(bArr) == 0 {
-		return aArr, nil
-	}
-	if !aIsArr || len(aArr) == 0 {
-		return bArr, nil
-	}
-
-	bIndex := make(map[any]int)
-	for i, item := range bArr {
-		if obj, ok := item.(map[string]any); ok {
-			if key, exists := obj[keyField]; exists {
-				bIndex[key] = i
-			}
-		}
-	}
-
-	bMerged := make(map[int]bool)
-	result := make([]any, 0, len(aArr)+len(bArr))
-
-	for i, aItem := range aArr {
-		aObj, aIsObj := aItem.(map[string]any)
-		if !aIsObj {
-			result = append(result, aItem)
-			continue
-		}
-
-		aKey, aHasKey := aObj[keyField]
-		if !aHasKey {
-			result = append(result, aItem)
-			continue
-		}
-
-		bIdx, bHasKey := bIndex[aKey]
-		if !bHasKey {
-			result = append(result, aItem)
-			continue
-		}
-
-		if replaceOnMatch {
-			result = append(result, aItem)
-		} else {
-			bItem := bArr[bIdx]
-			itemPath := fmt.Sprintf("%s/%d", path, i)
-			merged, err := m.deepMerge(aItem, bItem, itemPath)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, merged)
-		}
-		bMerged[bIdx] = true
-	}
-
-	for i, bItem := range bArr {
-		if !bMerged[i] {
-			result = append(result, bItem)
-		}
-	}
-
-	return result, nil
-}
-
-// mergeByDiscriminator merges two arrays of discriminated union objects.
+// mergeByDiscriminator merges two arrays of objects by a discriminator field.
 func (m *Merger) mergeByDiscriminator(a, b any, discriminatorField string, replaceOnMatch bool, path string) (any, error) {
 	aArr, aIsArr := a.([]any)
 	bArr, bIsArr := b.([]any)

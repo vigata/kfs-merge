@@ -71,6 +71,20 @@ func (s *Schema) MergeWithOptions(a, b []byte, opts MergeOptions) ([]byte, error
 	}
 
 	merger := NewMerger(s)
+
+	// Apply defaults if enabled: merge(A, merge(B, defaults))
+	if s.shouldApplyDefaults(opts) {
+		defaults := s.ExtractDefaults()
+		if defaults != nil {
+			// First merge B into defaults
+			bWithDefaults, err := merger.Merge(bVal, defaults)
+			if err != nil {
+				return nil, fmt.Errorf("failed to apply defaults to B: %w", err)
+			}
+			bVal = bWithDefaults
+		}
+	}
+
 	result, err := merger.Merge(aVal, bVal)
 	if err != nil {
 		return nil, fmt.Errorf("merge failed: %w", err)
@@ -120,6 +134,20 @@ func (s *Schema) MergeToValueWithOptions(a, b []byte, opts MergeOptions) (any, e
 	}
 
 	merger := NewMerger(s)
+
+	// Apply defaults if enabled: merge(A, merge(B, defaults))
+	if s.shouldApplyDefaults(opts) {
+		defaults := s.ExtractDefaults()
+		if defaults != nil {
+			// First merge B into defaults
+			bWithDefaults, err := merger.Merge(bVal, defaults)
+			if err != nil {
+				return nil, fmt.Errorf("failed to apply defaults to B: %w", err)
+			}
+			bVal = bWithDefaults
+		}
+	}
+
 	result, err := merger.Merge(aVal, bVal)
 	if err != nil {
 		return nil, fmt.Errorf("merge failed: %w", err)
@@ -140,3 +168,11 @@ func (s *Schema) Validate(instanceJSON []byte) error {
 	return validator.Validate(instanceJSON, PhaseValidateA)
 }
 
+// shouldApplyDefaults determines if defaults should be applied based on
+// schema config and merge options. Options override schema setting.
+func (s *Schema) shouldApplyDefaults(opts MergeOptions) bool {
+	if opts.ApplyDefaults != nil {
+		return *opts.ApplyDefaults
+	}
+	return s.globalConfig.ApplyDefaults
+}

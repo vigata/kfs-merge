@@ -20,6 +20,7 @@ type Schema struct {
 	fieldConfigs map[string]FieldMergeConfig
 	defConfigs   map[string]FieldMergeConfig
 	refToDefName map[string]string
+	defaults     map[string]any // cached extracted defaults from schema
 }
 
 // LoadSchemaFromFile loads a JSON Schema from a file path.
@@ -74,6 +75,11 @@ func LoadSchema(schemaJSON []byte) (*Schema, error) {
 		return nil, fmt.Errorf("failed to parse field merge configs: %w", err)
 	}
 
+	// Pre-extract defaults if applyDefaults is enabled at schema level
+	if s.globalConfig.ApplyDefaults {
+		s.ExtractDefaults()
+	}
+
 	return s, nil
 }
 
@@ -97,6 +103,9 @@ func (s *Schema) parseGlobalConfig() error {
 	}
 	if nullHandling, ok := mergeMap["nullHandling"].(string); ok {
 		s.globalConfig.NullHandling = NullHandling(nullHandling)
+	}
+	if applyDefaults, ok := mergeMap["applyDefaults"].(bool); ok {
+		s.globalConfig.ApplyDefaults = applyDefaults
 	}
 
 	return nil
@@ -124,9 +133,6 @@ func (s *Schema) parseDefsConfigs() error {
 			config := FieldMergeConfig{}
 			if strategy, ok := mergeMap["strategy"].(string); ok {
 				config.Strategy = MergeStrategy(strategy)
-			}
-			if mergeKey, ok := mergeMap["mergeKey"].(string); ok {
-				config.MergeKey = mergeKey
 			}
 			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
 				config.DiscriminatorField = discriminatorField
@@ -160,9 +166,6 @@ func (s *Schema) parseDefFieldConfigs(defName, path string, node map[string]any)
 			config := FieldMergeConfig{}
 			if strategy, ok := mergeMap["strategy"].(string); ok {
 				config.Strategy = MergeStrategy(strategy)
-			}
-			if mergeKey, ok := mergeMap["mergeKey"].(string); ok {
-				config.MergeKey = mergeKey
 			}
 			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
 				config.DiscriminatorField = discriminatorField
@@ -230,9 +233,6 @@ func (s *Schema) parseFieldConfigs(path string, node map[string]any) error {
 			config := FieldMergeConfig{}
 			if strategy, ok := mergeMap["strategy"].(string); ok {
 				config.Strategy = MergeStrategy(strategy)
-			}
-			if mergeKey, ok := mergeMap["mergeKey"].(string); ok {
-				config.MergeKey = mergeKey
 			}
 			if discriminatorField, ok := mergeMap["discriminatorField"].(string); ok {
 				config.DiscriminatorField = discriminatorField
@@ -334,4 +334,92 @@ func (s *Schema) NullHandlingFor(path string) NullHandling {
 // CompiledSchema returns the underlying compiled JSON Schema.
 func (s *Schema) CompiledSchema() *jsonschema.Schema {
 	return s.compiled
+}
+
+// Defaults returns the cached defaults extracted from the schema.
+// Returns nil if applyDefaults is not enabled or no defaults exist.
+func (s *Schema) Defaults() map[string]any {
+	return s.defaults
+}
+
+// ExtractDefaults extracts and caches default values from the schema.
+// This is called automatically during LoadSchema if applyDefaults is enabled.
+func (s *Schema) ExtractDefaults() map[string]any {
+	if s.defaults != nil {
+		return s.defaults
+	}
+
+	defaults := s.extractDefaultsFromNode(s.raw)
+	if defaultsMap, ok := defaults.(map[string]any); ok {
+		s.defaults = defaultsMap
+	}
+	return s.defaults
+}
+
+// extractDefaultsFromNode recursively extracts defaults from a schema node.
+func (s *Schema) extractDefaultsFromNode(node map[string]any) any {
+	// Handle $ref first
+	if ref, ok := node["$ref"].(string); ok {
+		if defName, isLocal := s.resolveRef(ref); isLocal {
+			if defs, ok := s.raw["$defs"].(map[string]any); ok {
+				if defNode, ok := defs[defName].(map[string]any); ok {
+					return s.extractDefaultsFromNode(defNode)
+				}
+			}
+		}
+		return nil
+	}
+
+	// Get the node's own default value
+	nodeDefault := node["default"]
+
+	// Check if this is an object type with properties
+	props, hasProps := node["properties"].(map[string]any)
+	if !hasProps {
+		// Not an object with properties, just return the default
+		return nodeDefault
+	}
+
+	// Extract defaults from properties (leaf defaults)
+	leafDefaults := make(map[string]any)
+	for propName, propValue := range props {
+		propMap, ok := propValue.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		propDefault := s.extractDefaultsFromNode(propMap)
+		if propDefault != nil {
+			leafDefaults[propName] = propDefault
+		}
+	}
+
+	// Merge: leaf defaults override object-level default
+	if nodeDefault == nil && len(leafDefaults) == 0 {
+		return nil
+	}
+
+	if nodeDefault == nil {
+		return leafDefaults
+	}
+
+	nodeDefaultMap, ok := nodeDefault.(map[string]any)
+	if !ok {
+		// nodeDefault is not an object, leaf defaults take precedence
+		if len(leafDefaults) > 0 {
+			return leafDefaults
+		}
+		return nodeDefault
+	}
+
+	// Merge: start with nodeDefaultMap, overlay leafDefaults
+	result := make(map[string]any)
+	for k, v := range nodeDefaultMap {
+		result[k] = v
+	}
+	for k, v := range leafDefaults {
+		result[k] = v
+	}
+
+	return result
 }

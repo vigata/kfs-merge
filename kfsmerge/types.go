@@ -28,9 +28,7 @@ const (
 	StrategyConcat MergeStrategy = "concat"
 	// StrategyConcatUnique appends A's items to B's, removing duplicates.
 	StrategyConcatUnique MergeStrategy = "concatUnique"
-	// StrategyMergeByKey merges array items by a key field.
-	StrategyMergeByKey MergeStrategy = "mergeByKey"
-	// StrategyMergeByDiscriminator merges array items by discriminator field (for oneOf unions).
+	// StrategyMergeByDiscriminator merges array items by discriminator field.
 	StrategyMergeByDiscriminator MergeStrategy = "mergeByDiscriminator"
 	// StrategyOverlay only applies A's explicitly provided fields to B, preserving B's other fields.
 	StrategyOverlay MergeStrategy = "overlay"
@@ -59,12 +57,12 @@ type GlobalMergeConfig struct {
 	DefaultStrategy MergeStrategy `json:"defaultStrategy,omitempty"`
 	ArrayStrategy   MergeStrategy `json:"arrayStrategy,omitempty"`
 	NullHandling    NullHandling  `json:"nullHandling,omitempty"`
+	ApplyDefaults   bool          `json:"applyDefaults,omitempty"`
 }
 
 // FieldMergeConfig holds per-field merge configuration.
 type FieldMergeConfig struct {
 	Strategy           MergeStrategy `json:"strategy,omitempty"`
-	MergeKey           string        `json:"mergeKey,omitempty"`
 	DiscriminatorField string        `json:"discriminatorField,omitempty"`
 	ReplaceOnMatch     *bool         `json:"replaceOnMatch,omitempty"`
 	NullHandling       NullHandling  `json:"nullHandling,omitempty"`
@@ -85,7 +83,7 @@ func (c FieldMergeConfig) ReplaceOnMatchOrDefault() bool {
 		return *c.ReplaceOnMatch
 	}
 	switch c.Strategy {
-	case StrategyMergeByKey, StrategyMergeByDiscriminator:
+	case StrategyMergeByDiscriminator:
 		return true
 	default:
 		return false
@@ -97,6 +95,7 @@ type MergeOptions struct {
 	SkipValidateA      bool
 	SkipValidateB      bool
 	SkipValidateResult bool
+	ApplyDefaults      *bool // nil uses schema setting, non-nil overrides
 }
 
 // DefaultMergeOptions returns the default options (all validations enabled).
@@ -112,4 +111,3 @@ const (
 	PhaseValidateB      ValidationPhase = "validate_b"
 	PhaseValidateResult ValidationPhase = "validate_result"
 )
-
